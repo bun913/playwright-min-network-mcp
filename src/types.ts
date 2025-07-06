@@ -30,7 +30,7 @@ export const StartMonitorSchema = z.object({
 });
 
 export const GetRecentRequestsSchema = z.object({
-  count: z.number().optional().default(30),
+  count: z.number().optional().default(10),
   filter: z
     .object({
       methods: z.array(z.string()).optional(),
