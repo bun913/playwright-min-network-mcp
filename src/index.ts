@@ -333,18 +333,16 @@ export class NetworkMonitorMCP {
 
       // Log filtering suggestions if result size is large
       const resultSize = JSON.stringify(response).length;
-      if (resultSize > 50000) {
-        // ~50KB threshold
-        console.error(
-          `💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`
-        );
-        console.error(`   • URL filtering: { "filter": { "url_pattern": "api|graphql" } }`);
-        console.error(`   • Method filtering: { "filter": { "methods": ["POST", "PUT"] } }`);
-        console.error(
+      if (resultSize > 20000) {
+        // ~20KB threshold
+        console.warn(`💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`);
+        console.warn(`   • URL filtering: { "filter": { "url_pattern": "collector|_private|analytics|avatar" } }`);
+        console.warn(`   • Method filtering: { "filter": { "methods": ["POST", "PUT"] } }`);
+        console.warn(
           `   • Content type filtering: { "filter": { "content_type": ["application/json"] } }`
         );
-        console.error(`   • Reduce count: { "count": 5 }`);
-        console.error(`   • Exclude bodies: { "include_body": false }`);
+        console.warn(`   • Reduce count: { "count": 5 }`);
+        console.warn(`   • Exclude bodies: { "include_body": false }`);
       }
 
       return {
