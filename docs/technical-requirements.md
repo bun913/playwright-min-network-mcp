@@ -18,11 +18,11 @@ An MCP tool that monitors and analyzes browser network communications in collabo
 ```typescript
 {
   max_buffer_size?: number,     // Default: 200
-  auto_filter?: boolean,        // Default: true
-  custom_filter?: {
-    include_url_patterns?: string[],
-    exclude_url_patterns?: string[],
-    content_types?: string[]
+  cdp_port?: number,            // Default: 9222
+  filter?: {
+    content_types?: string[] | "all"    // Default: ["application/json", "application/x-www-form-urlencoded", "multipart/form-data", "text/plain"]
+                                        // "all" = include all content types (including CSS, JS, images)
+                                        // [] = include nothing
   }
 }
 ```
@@ -50,16 +50,20 @@ An MCP tool that monitors and analyzes browser network communications in collabo
 
 ## Default Filter Configuration
 
-### Included Content-Types
-- `application/json`
-- `application/x-www-form-urlencoded`
-- `multipart/form-data`
-- `text/plain`
+### Default Included Content-Types
+- `application/json` - API responses
+- `application/x-www-form-urlencoded` - Form submissions  
+- `multipart/form-data` - File uploads
+- `text/plain` - Analytics and simple text data
 
-### Excluded URL Patterns
-- Static files: `\.(css|js|png|jpg|jpeg|svg|woff|ttf|ico)(\?|$)`
-- CDN: `githubassets.com.*\.(css|js|png|svg|woff)`
-- Analytics: `google-analytics.com`, `googletagmanager.com`
+### Special Values
+- `"all"` - Include all content types (CSS, JS, images, etc.)
+- `[]` - Include nothing (disable monitoring)
+
+### Content-Type Examples
+- **Static Files**: `text/css`, `application/javascript`, `image/png`, `image/svg+xml`
+- **API Data**: `application/json`, `application/xml`
+- **Forms**: `application/x-www-form-urlencoded`, `multipart/form-data`
 
 ### Included Communication Examples
 - ✅ GitHub API (`api.github.com`)
@@ -141,11 +145,13 @@ network-monitor-mcp/
 
 ### Basic Usage Flow
 ```
-1. start_monitor
-2. [Browser operations with Playwright MCP]
-3. get_recent_requests
-4. get_recent_requests --filter.url_pattern="api\."
-5. stop_monitor
+1. start_monitor                                    # Default: JSON/form data only
+2. start_monitor --filter.content_types="all"      # Include CSS, JS, images
+3. start_monitor --filter.content_types=[]         # Include nothing
+4. [Browser operations with Playwright MCP]
+5. get_recent_requests
+6. get_recent_requests --filter.url_pattern="api\."
+7. stop_monitor
 ```
 
 ## Design Principles

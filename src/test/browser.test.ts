@@ -66,7 +66,7 @@ describe('Browser Management', () => {
       const mockContext = {
         newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
       };
-      const mockPage = { 
+      const mockPage = {
         goto: vi.fn(),
         context: vi.fn().mockReturnValue(mockContext),
       };
@@ -116,7 +116,7 @@ describe('Browser Management', () => {
       const mockContext = {
         newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
       };
-      const mockPage = { 
+      const mockPage = {
         goto: vi.fn(),
         context: vi.fn().mockReturnValue(mockContext),
       };
@@ -136,7 +136,7 @@ describe('Browser Management', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const result = await launchBrowser(mockChromium);
-      
+
       // Should return fallback URL when CDP is not available
       expect(result).toBe('ws://localhost:9222/devtools/page/dummy');
     });
@@ -146,7 +146,7 @@ describe('Browser Management', () => {
       const mockContext = {
         newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
       };
-      const mockPage = { 
+      const mockPage = {
         goto: vi.fn(),
         context: vi.fn().mockReturnValue(mockContext),
       };
@@ -166,7 +166,7 @@ describe('Browser Management', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const result = await launchBrowser(mockChromium);
-      
+
       // Should return fallback URL when no pages found
       expect(result).toBe('ws://localhost:9222/devtools/page/dummy');
     });
@@ -176,7 +176,7 @@ describe('Browser Management', () => {
       const mockContext = {
         newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
       };
-      const mockPage = { 
+      const mockPage = {
         goto: vi.fn(),
         context: vi.fn().mockReturnValue(mockContext),
       };

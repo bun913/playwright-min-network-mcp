@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { connectToCdp, startNetworkMonitoring } from '../monitor.js';
+import { connectToCdp, shouldIncludeRequest, startNetworkMonitoring } from '../monitor.js';
 
 describe('Network Monitor', () => {
   describe('connectToCdp', () => {
@@ -82,7 +82,9 @@ describe('Network Monitor', () => {
 
       const mockBuffer = [];
 
-      await startNetworkMonitoring(mockWebSocket, mockBuffer);
+      await startNetworkMonitoring(mockWebSocket, mockBuffer, {
+        contentTypes: ['application/json'],
+      });
 
       // Should enable Network domain
       expect(mockWebSocket.send).toHaveBeenCalledWith(
@@ -117,7 +119,9 @@ describe('Network Monitor', () => {
         }
       );
 
-      await startNetworkMonitoring(mockWebSocket, mockBuffer);
+      await startNetworkMonitoring(mockWebSocket, mockBuffer, {
+        contentTypes: ['application/json'],
+      });
 
       // Simulate network request event
       const mockEvent = {
@@ -145,6 +149,52 @@ describe('Network Monitor', () => {
         url: 'https://api.example.com/data',
         method: 'GET',
       });
+    });
+  });
+
+  describe('shouldIncludeRequest', () => {
+    it('should include all requests when filter is "all"', () => {
+      const filter = { contentTypes: 'all' as const };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(true);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(true);
+      expect(shouldIncludeRequest(undefined, filter)).toBe(true);
+    });
+
+    it('should include nothing when filter is empty array', () => {
+      const filter = { contentTypes: [] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(false);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(false);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(false);
+      expect(shouldIncludeRequest(undefined, filter)).toBe(false);
+    });
+
+    it('should include requests matching content type array', () => {
+      const filter = { contentTypes: ['application/json', 'text/plain'] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/plain', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(false);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(false);
+    });
+
+    it('should exclude requests with no content type when using array filter', () => {
+      const filter = { contentTypes: ['application/json'] };
+
+      expect(shouldIncludeRequest(undefined, filter)).toBe(false);
+      expect(shouldIncludeRequest('', filter)).toBe(false);
+    });
+
+    it('should match content type substrings', () => {
+      const filter = { contentTypes: ['json'] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/plain', filter)).toBe(false);
     });
   });
 });

@@ -5,15 +5,28 @@ import { z } from 'zod';
  */
 export const StartMonitorSchema = z.object({
   max_buffer_size: z.number().optional().default(200),
-  auto_filter: z.boolean().optional().default(true),
   cdp_port: z.number().optional().default(9222),
-  custom_filter: z
+  filter: z
     .object({
-      include_url_patterns: z.array(z.string()).optional(),
-      exclude_url_patterns: z.array(z.string()).optional(),
-      content_types: z.array(z.string()).optional(),
+      content_types: z
+        .union([z.array(z.string()), z.literal('all')])
+        .optional()
+        .default([
+          'application/json',
+          'application/x-www-form-urlencoded',
+          'multipart/form-data',
+          'text/plain',
+        ]),
     })
-    .optional(),
+    .optional()
+    .default({
+      content_types: [
+        'application/json',
+        'application/x-www-form-urlencoded',
+        'multipart/form-data',
+        'text/plain',
+      ],
+    }),
 });
 
 export const GetRecentRequestsSchema = z.object({
@@ -95,22 +108,13 @@ export interface CdpResponseReceived {
  * Filter configuration
  */
 export interface FilterConfig {
-  includeUrlPatterns?: string[];
-  excludeUrlPatterns?: string[];
-  contentTypes?: string[];
+  contentTypes: string[] | 'all';
 }
 
 /**
- * Default filter patterns
+ * Default content types for SDET monitoring (API and form data)
  */
-export const DEFAULT_EXCLUDE_PATTERNS = [
-  '\\.(css|js|png|jpg|jpeg|gif|svg|woff|woff2|ttf|ico)(\\?|$)',
-  'githubassets\\.com.*\\.(css|js|png|svg|woff)',
-  'google-analytics\\.com',
-  'googletagmanager\\.com',
-];
-
-export const DEFAULT_INCLUDE_CONTENT_TYPES = [
+export const DEFAULT_CONTENT_TYPES = [
   'application/json',
   'application/x-www-form-urlencoded',
   'multipart/form-data',
@@ -130,7 +134,7 @@ export interface BrowserConfig {
 export interface MonitorStatus {
   status: 'started' | 'stopped';
   buffer_size: number;
-  auto_filter: boolean;
+  filter: FilterConfig;
   cdp_endpoint: string | null;
   cdp_port: number;
   browser_already_running: boolean;

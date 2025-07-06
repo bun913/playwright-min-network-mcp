@@ -45,7 +45,7 @@ export class NetworkMonitorMCP {
           {
             name: 'start_monitor',
             description:
-              'Start network monitoring with auto-launched browser. Smart filtering excludes static files/CDN/analytics, includes API communications.',
+              'Start network monitoring with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -54,39 +54,39 @@ export class NetworkMonitorMCP {
                   description: 'Maximum buffer size for storing requests',
                   default: 200,
                 },
-                auto_filter: {
-                  type: 'boolean',
-                  description:
-                    'Enable smart default filtering (excludes static files, CDN assets, analytics; includes JSON, form data, plain text)',
-                  default: true,
-                },
                 cdp_port: {
                   type: 'number',
                   description: 'Chrome DevTools Protocol port number',
                   default: 9222,
                 },
-                custom_filter: {
+                filter: {
                   type: 'object',
                   description:
-                    'Custom filtering rules. Works with auto_filter when both enabled. Example: {"include_url_patterns": ["api\\\\.github\\\\.com"], "content_types": ["application/json"]}',
+                    'Content-type filtering configuration. Controls which types of network requests to capture.',
                   properties: {
-                    include_url_patterns: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description:
-                        'Regex patterns for URLs to include (whitelist). Takes precedence over exclude patterns. Example: ["api\\\\.github\\\\.com", "graphql", ".*\\\\.amazonaws\\\\.com"]',
-                    },
-                    exclude_url_patterns: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description:
-                        'Regex patterns for URLs to exclude (blacklist). Applied after include patterns. Example: ["google-analytics", "\\\\.(css|js|png)$", "tracking"]',
-                    },
                     content_types: {
-                      type: 'array',
-                      items: { type: 'string' },
+                      oneOf: [
+                        {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description:
+                            'Array of content-type patterns to include. Example: ["application/json", "text/css"] to capture JSON and CSS files.',
+                        },
+                        {
+                          type: 'string',
+                          enum: ['all'],
+                          description:
+                            'Special value "all" to capture all content types including static files (CSS, JS, images).',
+                        },
+                      ],
+                      default: [
+                        'application/json',
+                        'application/x-www-form-urlencoded',
+                        'multipart/form-data',
+                        'text/plain',
+                      ],
                       description:
-                        'Content-Type headers to include (exact match). Replaces default content types when specified. Example: ["application/json", "text/plain", "application/xml"]',
+                        'Content types to capture. Default: API and form data only. Use "all" for everything including static files, or [] to capture nothing.',
                     },
                   },
                 },
@@ -198,14 +198,9 @@ export class NetworkMonitorMCP {
           await startNetworkMonitoring(
             this.cdpWebSocket,
             this.networkBuffer,
-            options.auto_filter,
-            options.custom_filter
-              ? {
-                  includeUrlPatterns: options.custom_filter.include_url_patterns,
-                  excludeUrlPatterns: options.custom_filter.exclude_url_patterns,
-                  contentTypes: options.custom_filter.content_types,
-                }
-              : undefined,
+            {
+              contentTypes: options.filter.content_types,
+            },
             options.max_buffer_size
           );
           this.isMonitoring = true;
@@ -220,7 +215,9 @@ export class NetworkMonitorMCP {
       const status: MonitorStatus = {
         status: 'started',
         buffer_size: options.max_buffer_size,
-        auto_filter: options.auto_filter,
+        filter: {
+          contentTypes: options.filter.content_types,
+        },
         cdp_endpoint: this.cdpWebSocketUrl,
         cdp_port: this.cdpPort,
         browser_already_running: browserExists,

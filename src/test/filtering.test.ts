@@ -3,87 +3,76 @@ import { shouldIncludeRequest } from '../monitor.js';
 
 describe('Network Filtering', () => {
   describe('shouldIncludeRequest', () => {
-    it('should include all requests when auto_filter is false and no custom filters', () => {
-      const result = shouldIncludeRequest('https://example.com/test.css', 'text/css', false);
-      expect(result).toBe(true);
+    it('should include all requests when filter is "all"', () => {
+      const filter = { contentTypes: 'all' as const };
+
+      expect(shouldIncludeRequest('text/css', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/javascript', filter)).toBe(true);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest(undefined, filter)).toBe(true);
     });
 
-    it('should exclude static files when auto_filter is true', () => {
-      const result = shouldIncludeRequest('https://example.com/style.css', 'text/css', true);
-      expect(result).toBe(false);
+    it('should include nothing when filter is empty array', () => {
+      const filter = { contentTypes: [] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(false);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(false);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(false);
+      expect(shouldIncludeRequest(undefined, filter)).toBe(false);
     });
 
-    it('should include JSON responses when auto_filter is true', () => {
-      const result = shouldIncludeRequest('https://api.github.com/users', 'application/json', true);
-      expect(result).toBe(true);
+    it('should include only matching content types when array is specified', () => {
+      const filter = { contentTypes: ['application/json', 'text/plain'] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/plain', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(false);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(false);
     });
 
-    it('should respect custom include patterns (whitelist)', () => {
-      const result = shouldIncludeRequest(
-        'https://api.github.com/users',
-        'application/json',
-        true,
-        { includeUrlPatterns: ['api\\.github\\.com'] }
-      );
-      expect(result).toBe(true);
+    it('should exclude requests with no content type when using array filter', () => {
+      const filter = { contentTypes: ['application/json'] };
+
+      expect(shouldIncludeRequest(undefined, filter)).toBe(false);
+      expect(shouldIncludeRequest('', filter)).toBe(false);
     });
 
-    it('should exclude URLs not matching custom include patterns', () => {
-      const result = shouldIncludeRequest('https://example.com/api', 'application/json', true, {
-        includeUrlPatterns: ['api\\.github\\.com'],
-      });
-      expect(result).toBe(false);
+    it('should match partial content type strings', () => {
+      const filter = { contentTypes: ['json'] };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/plain', filter)).toBe(false);
     });
 
-    it('should exclude URLs matching custom exclude patterns', () => {
-      const result = shouldIncludeRequest(
-        'https://google-analytics.com/collect',
-        'application/json',
-        false,
-        { excludeUrlPatterns: ['google-analytics'] }
-      );
-      expect(result).toBe(false);
+    it('should handle default content types for API monitoring', () => {
+      const filter = {
+        contentTypes: [
+          'application/json',
+          'application/x-www-form-urlencoded',
+          'multipart/form-data',
+          'text/plain',
+        ],
+      };
+
+      expect(shouldIncludeRequest('application/json', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/x-www-form-urlencoded', filter)).toBe(true);
+      expect(shouldIncludeRequest('multipart/form-data', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/plain', filter)).toBe(true);
+      expect(shouldIncludeRequest('text/css', filter)).toBe(false);
+      expect(shouldIncludeRequest('application/javascript', filter)).toBe(false);
+      expect(shouldIncludeRequest('image/png', filter)).toBe(false);
     });
 
-    it('should respect custom content types', () => {
-      const result = shouldIncludeRequest('https://example.com/api', 'application/xml', false, {
-        contentTypes: ['application/xml'],
-      });
-      expect(result).toBe(true);
-    });
+    it('should handle complex content type headers', () => {
+      const filter = { contentTypes: ['application/json'] };
 
-    it('should handle invalid regex patterns gracefully', () => {
-      const result = shouldIncludeRequest('https://example.com/api', 'application/json', false, {
-        includeUrlPatterns: ['[invalid'],
-      });
-      expect(result).toBe(false);
-    });
-
-    it('should apply exclude patterns after include patterns', () => {
-      // Include patterns are applied first, then exclude patterns are applied
-      const result = shouldIncludeRequest(
-        'https://api.github.com/users',
-        'application/json',
-        false,
-        {
-          includeUrlPatterns: ['api\\.github\\.com'],
-          excludeUrlPatterns: ['github'], // This should exclude even after include matches
-        }
-      );
-      expect(result).toBe(false); // Should be excluded
-    });
-
-    it('should apply include patterns first, then exclude patterns', () => {
-      const result = shouldIncludeRequest(
-        'https://github.com/analytics',
-        'application/json',
-        false,
-        {
-          includeUrlPatterns: ['github\\.com'],
-          excludeUrlPatterns: ['analytics'],
-        }
-      );
-      expect(result).toBe(false);
+      expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json;charset=utf-8', filter)).toBe(true);
+      expect(shouldIncludeRequest('application/json; boundary=something', filter)).toBe(true);
     });
   });
 });
