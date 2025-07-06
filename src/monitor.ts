@@ -141,7 +141,30 @@ export async function startNetworkMonitoring(
             if (index !== -1) {
               buffer.splice(index, 1);
             }
+          } else {
+            // Get response body for included requests
+            ws.send(
+              JSON.stringify({
+                id: Math.floor(Math.random() * 1000000),
+                method: 'Network.getResponseBody',
+                params: { requestId },
+              })
+            );
           }
+        }
+      }
+
+      // Handle Network.getResponseBody responses
+      if (message.result && message.result.body !== undefined) {
+        // Find the request that matches this response (we don't have the requestId in the response)
+        // This is a limitation - we'll need to match by timing or other means
+        // For now, we'll add the body to the most recent request without a body
+        const recentRequest = buffer
+          .slice()
+          .reverse()
+          .find((req) => req.response && !req.response.body);
+        if (recentRequest?.response) {
+          recentRequest.response.body = message.result.body;
         }
       }
     } catch (error) {

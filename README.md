@@ -193,6 +193,7 @@ Retrieve captured network requests with optional filtering.
 | `filter.url_pattern` | string | none | Regular expression for URL filtering |
 | `filter.content_type` | string[] | none | Content types to include |
 | `include_body` | boolean | true | Include request/response bodies in output |
+| `include_headers` | boolean | false | Include request/response headers in output |
 
 ## Default Filtering Behavior
 

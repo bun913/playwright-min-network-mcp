@@ -137,6 +137,11 @@ export class NetworkMonitorMCP {
                   description: 'Include request/response bodies',
                   default: true,
                 },
+                include_headers: {
+                  type: 'boolean',
+                  description: 'Include request/response headers',
+                  default: false,
+                },
               },
             },
           },
@@ -308,7 +313,7 @@ export class NetworkMonitorMCP {
       filteredRequests.sort((a, b) => b.timestamp - a.timestamp);
       const limitedRequests = filteredRequests.slice(0, options.count);
 
-      // Remove request/response bodies if not requested
+      // Remove request/response bodies and headers if not requested
       const requestsToReturn = limitedRequests.map((req) => {
         const requestCopy = { ...req };
 
@@ -319,6 +324,13 @@ export class NetworkMonitorMCP {
               ...requestCopy.response,
             };
             delete requestCopy.response.body;
+          }
+        }
+
+        if (!options.include_headers) {
+          (requestCopy as any).headers = undefined;
+          if (requestCopy.response) {
+            (requestCopy.response as any).headers = undefined;
           }
         }
 

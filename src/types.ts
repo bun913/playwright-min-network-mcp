@@ -39,6 +39,7 @@ export const GetRecentRequestsSchema = z.object({
     })
     .optional(),
   include_body: z.boolean().optional().default(true),
+  include_headers: z.boolean().optional().default(false),
 });
 
 /**
