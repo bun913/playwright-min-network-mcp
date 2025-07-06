@@ -226,6 +226,58 @@ describe('NetworkMonitorMCP', () => {
       expect(response.requests[0].response?.body).toBeUndefined();
     });
 
+    it('should exclude headers by default', async () => {
+      const mockRequests: NetworkRequest[] = [
+        {
+          id: '1',
+          url: 'https://api.example.com/data',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          timestamp: 1000,
+          type: 'request',
+          response: {
+            status: 200,
+            headers: { Server: 'nginx' },
+            mimeType: 'application/json',
+          },
+        },
+      ];
+
+      networkMonitor.setNetworkBuffer(mockRequests);
+      const result = await networkMonitor.testGetRecentRequests({});
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.requests[0].headers).toBeUndefined();
+      expect(response.requests[0].response?.headers).toBeUndefined();
+    });
+
+    it('should include headers when include_headers is true', async () => {
+      const mockRequests: NetworkRequest[] = [
+        {
+          id: '1',
+          url: 'https://api.example.com/data',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          timestamp: 1000,
+          type: 'request',
+          response: {
+            status: 200,
+            headers: { Server: 'nginx' },
+            mimeType: 'application/json',
+          },
+        },
+      ];
+
+      networkMonitor.setNetworkBuffer(mockRequests);
+      const result = await networkMonitor.testGetRecentRequests({
+        include_headers: true,
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.requests[0].headers).toEqual({ 'Content-Type': 'application/json' });
+      expect(response.requests[0].response?.headers).toEqual({ Server: 'nginx' });
+    });
+
     it('should handle invalid URL pattern gracefully', async () => {
       const mockRequests: NetworkRequest[] = [
         {
