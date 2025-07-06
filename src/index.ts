@@ -184,7 +184,14 @@ export class NetworkMonitorMCP {
           this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
           console.error(`DEBUG: Using existing page WebSocket: ${this.cdpWebSocketUrl}`);
         } else {
-          throw new Error('No pages found in existing browser');
+          console.error(
+            `DEBUG: Browser running on port ${this.cdpPort} but no active pages found. Cleaning up and launching new instance...`
+          );
+          // Clean up any existing monitoring state
+          await this.stopMonitor();
+          // Launch new browser
+          this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
+          console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
         }
       } else {
         console.error('DEBUG: No existing browser found, launching new instance...');
