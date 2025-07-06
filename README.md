@@ -2,6 +2,54 @@
 
 A minimal network monitoring MCP tool for Playwright browser automation. **Just 3 simple tools** to capture, filter, and analyze network traffic during web automation.
 
+```mermaid
+graph LR
+    A[Claude AI] --> B[🔍 Network MCP<br/>monitoring only]
+    A --> C[🎮 Playwright MCP<br/>operation only]
+    
+    B --> D[Chrome Browser<br/>CDP: 9222]
+    C --> D
+    
+    style B fill:#fff3e0
+    style C fill:#f3e5f5
+    style D fill:#e1f5fe
+```
+
+```mermaid
+flowchart TD
+    Start([Start]) --> A[🔍 Network MCP startup]
+    A --> B[🌐 Launch browser<br/>CDP: 9222 waiting]
+    B --> C[🎮 Playwright MCP startup]
+    C --> D[🎮 Connect to existing browser via CDP]
+    D --> E[Both MCPs sharing browser state]
+    
+    E -->|🔍 Network MCP| F[🔍 Start network monitoring]
+    E -->|🎮 Playwright MCP| G[🎮 Execute browser operations]
+    
+    subgraph Browser["🌐"]
+        F --> H[🔍 Record requests/responses]
+        G --> I[🎮 Page navigation & clicks]
+    end
+    
+    H --> J[🔍 Get monitoring results]
+    I --> K[🎮 Operation complete]
+    J --> End([Complete])
+    K --> End
+    
+    style A fill:#fff3e0
+    style B fill:#f0f8ff,stroke:#4682b4,stroke-width:2px
+    style C fill:#f3e5f5
+    style D fill:#f3e5f5
+    style E fill:#e8f5e8
+    style Browser fill:#f0f8ff,stroke:#4682b4,stroke-width:3px
+    style F fill:#fff3e0
+    style G fill:#f3e5f5
+    style H fill:#fff3e0
+    style I fill:#f3e5f5
+    style J fill:#fff3e0
+    style K fill:#f3e5f5
+```
+
 ## Features
 
 - **🎯 Minimal Design**: Only 3 tools (`start_monitor`, `stop_monitor`, `get_recent_requests`) - no complexity
@@ -244,6 +292,7 @@ Network requests are returned in this format:
   ]
 }
 ```
+
 
 ## Browser Integration
 
