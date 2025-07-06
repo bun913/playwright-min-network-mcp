@@ -335,8 +335,12 @@ export class NetworkMonitorMCP {
       const resultSize = JSON.stringify(response).length;
       if (resultSize > 20000) {
         // ~20KB threshold
-        console.warn(`💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`);
-        console.warn(`   • URL filtering: { "filter": { "url_pattern": "collector|_private|analytics|avatar" } }`);
+        console.warn(
+          `💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`
+        );
+        console.warn(
+          `   • URL filtering: { "filter": { "url_pattern": "collector|_private|analytics|avatar" } }`
+        );
         console.warn(`   • Method filtering: { "filter": { "methods": ["POST", "PUT"] } }`);
         console.warn(
           `   • Content type filtering: { "filter": { "content_type": ["application/json"] } }`
