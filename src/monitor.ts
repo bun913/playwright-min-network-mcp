@@ -3,6 +3,7 @@
  */
 
 import type { FilterConfig, NetworkRequest } from './types.js';
+import { DEFAULT_EXCLUDE_PATTERNS, DEFAULT_INCLUDE_CONTENT_TYPES } from './types.js';
 
 /**
  * Connect to Chrome DevTools Protocol WebSocket
@@ -41,11 +42,75 @@ export async function connectToCdp(cdpUrl: string): Promise<WebSocket> {
 export function shouldIncludeRequest(
   url: string,
   contentType: string | undefined,
-  _autoFilter: boolean,
-  _customFilter?: FilterConfig
+  autoFilter: boolean,
+  customFilter?: FilterConfig
 ): boolean {
-  // DEBUG: Always return true to bypass all filtering
-  console.error(`DEBUG: Including request: ${url} (contentType: ${contentType})`);
+  // Step 1: Apply custom include patterns first (whitelist)
+  if (customFilter?.includeUrlPatterns && customFilter.includeUrlPatterns.length > 0) {
+    const matchesIncludePattern = customFilter.includeUrlPatterns.some((pattern) => {
+      try {
+        const regex = new RegExp(pattern);
+        return regex.test(url);
+      } catch (error) {
+        console.error(`Invalid include pattern: ${pattern}`, error);
+        return false;
+      }
+    });
+
+    // If custom include patterns are specified but URL doesn't match, exclude
+    if (!matchesIncludePattern) {
+      return false;
+    }
+  }
+
+  // Step 2: Apply exclude patterns (custom first, then auto-filter defaults)
+  const excludePatterns = [];
+
+  // Add custom exclude patterns
+  if (customFilter?.excludeUrlPatterns) {
+    excludePatterns.push(...customFilter.excludeUrlPatterns);
+  }
+
+  // Add default exclude patterns if auto-filter is enabled
+  if (autoFilter) {
+    excludePatterns.push(...DEFAULT_EXCLUDE_PATTERNS);
+  }
+
+  // Check if URL matches any exclude pattern
+  for (const pattern of excludePatterns) {
+    try {
+      const regex = new RegExp(pattern);
+      if (regex.test(url)) {
+        return false;
+      }
+    } catch (error) {
+      console.error(`Invalid exclude pattern: ${pattern}`, error);
+    }
+  }
+
+  // Step 3: Apply content type filtering
+  if (contentType) {
+    const contentTypesToInclude = [];
+
+    // Use custom content types if specified
+    if (customFilter?.contentTypes && customFilter.contentTypes.length > 0) {
+      contentTypesToInclude.push(...customFilter.contentTypes);
+    }
+    // Otherwise use defaults if auto-filter is enabled
+    else if (autoFilter) {
+      contentTypesToInclude.push(...DEFAULT_INCLUDE_CONTENT_TYPES);
+    }
+
+    // If content type filtering is active, check if current content type matches
+    if (contentTypesToInclude.length > 0) {
+      const matchesContentType = contentTypesToInclude.some((ct) => contentType.includes(ct));
+      if (!matchesContentType) {
+        return false;
+      }
+    }
+  }
+
+  // If we reach here, the request should be included
   return true;
 }
 
@@ -60,8 +125,8 @@ export function shouldIncludeRequest(
 export async function startNetworkMonitoring(
   ws: WebSocket,
   buffer: NetworkRequest[],
-  _autoFilter = true,
-  _customFilter?: FilterConfig,
+  autoFilter = true,
+  customFilter?: FilterConfig,
   maxBufferSize = 200
 ): Promise<void> {
   console.error('DEBUG: Starting network monitoring...');
@@ -114,9 +179,11 @@ export async function startNetworkMonitoring(
           body: request.postData,
         };
 
-        // Always add to buffer (no filtering for debugging)
+        // Store temporarily to apply filtering after response is received
         buffer.push(networkRequest);
-        console.error(`DEBUG: Added request to buffer. Buffer size: ${buffer.length}`);
+        console.error(
+          `DEBUG: Added request to buffer (before filtering). Buffer size: ${buffer.length}`
+        );
 
         // Maintain buffer size limit
         if (buffer.length > maxBufferSize) {
@@ -139,7 +206,26 @@ export async function startNetworkMonitoring(
             mimeType: response.mimeType,
           };
           existingRequest.responseTimestamp = timestamp;
-          console.error(`DEBUG: Updated request ${requestId} with response data`);
+
+          // Apply filtering now that we have response data
+          const shouldInclude = shouldIncludeRequest(
+            existingRequest.url,
+            response.mimeType,
+            autoFilter,
+            customFilter
+          );
+
+
+          if (!shouldInclude) {
+            // Remove from buffer if it doesn't pass filter
+            const index = buffer.findIndex((req) => req.id === requestId);
+            if (index !== -1) {
+              buffer.splice(index, 1);
+              console.error(`DEBUG: Filtered out request ${requestId}: ${existingRequest.url}`);
+            }
+          } else {
+            console.error(`DEBUG: Request ${requestId} passed filtering: ${existingRequest.url}`);
+          }
         } else {
           console.error(`DEBUG: Could not find request ${requestId} in buffer`);
         }

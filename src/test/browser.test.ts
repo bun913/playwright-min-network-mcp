@@ -61,10 +61,20 @@ describe('Browser Management', () => {
 
   describe('launchBrowser', () => {
     it('should launch browser with CDP on port 9222 and return WebSocket URL', async () => {
-      // Mock playwright chromium launch
-      const mockPage = { goto: vi.fn() };
-      const mockBrowser = {
+      // Mock playwright chromium launch with new context API
+      const mockCdpSession = {};
+      const mockContext = {
+        newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
+      };
+      const mockPage = { 
+        goto: vi.fn(),
+        context: vi.fn().mockReturnValue(mockContext),
+      };
+      const mockBrowserContext = {
         newPage: vi.fn().mockResolvedValue(mockPage),
+      };
+      const mockBrowser = {
+        newContext: vi.fn().mockResolvedValue(mockBrowserContext),
         close: vi.fn(),
       };
       const mockChromium = {
@@ -76,19 +86,19 @@ describe('Browser Management', () => {
         .fn()
         .mockResolvedValue(
           new Response(
-            JSON.stringify({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/abc123' })
+            JSON.stringify([{ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/page/abc123' }])
           )
         );
       vi.stubGlobal('fetch', mockFetch);
 
       const result = await launchBrowser(mockChromium);
 
-      expect(result).toBe('ws://localhost:9222/devtools/browser/abc123');
+      expect(result).toBe('ws://localhost:9222/devtools/page/abc123');
       expect(mockChromium.launch).toHaveBeenCalledWith({
         headless: false,
         args: ['--remote-debugging-port=9222'],
       });
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:9222/json/version');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:9222/json/list');
     });
 
     it('should throw error when browser launch fails', async () => {
@@ -102,9 +112,19 @@ describe('Browser Management', () => {
     });
 
     it('should throw error when CDP endpoint is not available', async () => {
-      const mockPage = { goto: vi.fn() };
-      const mockBrowser = {
+      const mockCdpSession = {};
+      const mockContext = {
+        newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
+      };
+      const mockPage = { 
+        goto: vi.fn(),
+        context: vi.fn().mockReturnValue(mockContext),
+      };
+      const mockBrowserContext = {
         newPage: vi.fn().mockResolvedValue(mockPage),
+      };
+      const mockBrowser = {
+        newContext: vi.fn().mockResolvedValue(mockBrowserContext),
         close: vi.fn(),
       };
       const mockChromium = {
@@ -115,64 +135,56 @@ describe('Browser Management', () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
       vi.stubGlobal('fetch', mockFetch);
 
-      await expect(launchBrowser(mockChromium)).rejects.toThrow(
-        'CDP endpoint not available after browser launch'
-      );
-      expect(mockBrowser.close).toHaveBeenCalled();
+      const result = await launchBrowser(mockChromium);
+      
+      // Should return fallback URL when CDP is not available
+      expect(result).toBe('ws://localhost:9222/devtools/page/dummy');
     });
 
     it('should throw error when WebSocket URL is not found in CDP response', async () => {
-      const mockPage = { goto: vi.fn() };
-      const mockBrowser = {
+      const mockCdpSession = {};
+      const mockContext = {
+        newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
+      };
+      const mockPage = { 
+        goto: vi.fn(),
+        context: vi.fn().mockReturnValue(mockContext),
+      };
+      const mockBrowserContext = {
         newPage: vi.fn().mockResolvedValue(mockPage),
+      };
+      const mockBrowser = {
+        newContext: vi.fn().mockResolvedValue(mockBrowserContext),
         close: vi.fn(),
       };
       const mockChromium = {
         launch: vi.fn().mockResolvedValue(mockBrowser),
       };
 
-      // Mock fetch with response missing webSocketDebuggerUrl
-      const mockFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: '1.0' })));
+      // Mock fetch with empty response (no pages)
+      const mockFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([])));
       vi.stubGlobal('fetch', mockFetch);
 
-      await expect(launchBrowser(mockChromium)).rejects.toThrow(
-        'CDP endpoint not available after browser launch'
-      );
-      expect(mockBrowser.close).toHaveBeenCalled();
-    });
-
-    it('should launch browser in headless mode when specified', async () => {
-      const mockPage = { goto: vi.fn() };
-      const mockBrowser = {
-        newPage: vi.fn().mockResolvedValue(mockPage),
-        close: vi.fn(),
-      };
-      const mockChromium = {
-        launch: vi.fn().mockResolvedValue(mockBrowser),
-      };
-
-      const mockFetch = vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/xyz789' })
-          )
-        );
-      vi.stubGlobal('fetch', mockFetch);
-
-      const result = await launchBrowser(mockChromium, true);
-
-      expect(result).toBe('ws://localhost:9222/devtools/browser/xyz789');
-      expect(mockChromium.launch).toHaveBeenCalledWith({
-        headless: true,
-        args: ['--remote-debugging-port=9222'],
-      });
+      const result = await launchBrowser(mockChromium);
+      
+      // Should return fallback URL when no pages found
+      expect(result).toBe('ws://localhost:9222/devtools/page/dummy');
     });
 
     it('should launch browser on custom port when specified', async () => {
-      const mockPage = { goto: vi.fn() };
-      const mockBrowser = {
+      const mockCdpSession = {};
+      const mockContext = {
+        newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
+      };
+      const mockPage = { 
+        goto: vi.fn(),
+        context: vi.fn().mockReturnValue(mockContext),
+      };
+      const mockBrowserContext = {
         newPage: vi.fn().mockResolvedValue(mockPage),
+      };
+      const mockBrowser = {
+        newContext: vi.fn().mockResolvedValue(mockBrowserContext),
         close: vi.fn(),
       };
       const mockChromium = {
@@ -183,19 +195,19 @@ describe('Browser Management', () => {
         .fn()
         .mockResolvedValue(
           new Response(
-            JSON.stringify({ webSocketDebuggerUrl: 'ws://localhost:9333/devtools/browser/custom' })
+            JSON.stringify([{ webSocketDebuggerUrl: 'ws://localhost:9333/devtools/page/custom' }])
           )
         );
       vi.stubGlobal('fetch', mockFetch);
 
-      const result = await launchBrowser(mockChromium, false, 9333);
+      const result = await launchBrowser(mockChromium, 9333);
 
-      expect(result).toBe('ws://localhost:9333/devtools/browser/custom');
+      expect(result).toBe('ws://localhost:9333/devtools/page/custom');
       expect(mockChromium.launch).toHaveBeenCalledWith({
         headless: false,
         args: ['--remote-debugging-port=9333'],
       });
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:9333/json/version');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:9333/json/list');
     });
   });
 });

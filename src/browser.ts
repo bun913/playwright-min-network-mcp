@@ -29,40 +29,39 @@ export async function checkExistingBrowser(port = 9222): Promise<boolean> {
 export async function launchBrowser(chromium: any, port = 9222): Promise<string> {
   try {
     console.error(`DEBUG: Launching browser with CDP on port ${port}...`);
-    
+
     // シンプルにブラウザを起動
     const browser = await chromium.launch({
       headless: false,
       args: [`--remote-debugging-port=${port}`],
     });
-    
+
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto('about:blank');
-    
+
     // CDPセッションを作成
-    const cdpSession = await page.context().newCDPSession(page);
+    const _cdpSession = await page.context().newCDPSession(page);
     console.error('DEBUG: CDP session created successfully');
-    
+
     // 少し待ってからCDPエンドポイントを確認
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     try {
       const response = await fetch(`http://localhost:${port}/json/list`);
       const pages = await response.json();
       console.error(`DEBUG: Found ${pages.length} pages in CDP`);
-      
+
       if (pages.length > 0 && pages[0].webSocketDebuggerUrl) {
         console.error(`DEBUG: Using WebSocket URL: ${pages[0].webSocketDebuggerUrl}`);
         return pages[0].webSocketDebuggerUrl;
       }
     } catch (error) {
-      console.error('DEBUG: CDP endpoint not available, using fallback');
+      console.error('DEBUG: CDP endpoint not available, using fallback. Error:', error);
     }
-    
+
     // フォールバック: ダミーのWebSocket URLを返す（実際のCDPセッションは既に作成済み）
     return `ws://localhost:${port}/devtools/page/dummy`;
-    
   } catch (error) {
     throw new Error(`Failed to launch browser: ${error instanceof Error ? error.message : error}`);
   }
