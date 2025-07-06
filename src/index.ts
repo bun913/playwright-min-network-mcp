@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
 import { checkExistingBrowser, launchBrowser } from './browser.js';
+import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
   GetRecentRequestsSchema,
   type MonitorStatus,
@@ -13,12 +14,13 @@ import {
   StartMonitorSchema,
 } from './types.js';
 
-class NetworkMonitorMCP {
+export class NetworkMonitorMCP {
   private server: Server;
   private isMonitoring = false;
   private cdpWebSocketUrl: string | null = null;
   private cdpPort = 9222;
   private networkBuffer: NetworkRequest[] = [];
+  private cdpWebSocket: WebSocket | null = null;
 
   constructor() {
     this.server = new Server(
@@ -58,11 +60,6 @@ class NetworkMonitorMCP {
                     'Enable smart default filtering (excludes static files, CDN assets, analytics; includes JSON, form data, plain text)',
                   default: true,
                 },
-                headless: {
-                  type: 'boolean',
-                  description: 'Run browser in headless mode (false = visible browser)',
-                  default: false,
-                },
                 cdp_port: {
                   type: 'number',
                   description: 'Chrome DevTools Protocol port number',
@@ -70,7 +67,8 @@ class NetworkMonitorMCP {
                 },
                 custom_filter: {
                   type: 'object',
-                  description: 'Custom filtering rules. Works with auto_filter when both enabled. Example: {"include_url_patterns": ["api\\\\.github\\\\.com"], "content_types": ["application/json"]}',
+                  description:
+                    'Custom filtering rules. Works with auto_filter when both enabled. Example: {"include_url_patterns": ["api\\\\.github\\\\.com"], "content_types": ["application/json"]}',
                   properties: {
                     include_url_patterns: {
                       type: 'array',
@@ -168,22 +166,56 @@ class NetworkMonitorMCP {
       this.cdpPort = options.cdp_port;
 
       // Check if browser is already running
+      console.error(`DEBUG: Checking for existing browser on port ${this.cdpPort}...`);
       const browserExists = await checkExistingBrowser(this.cdpPort);
 
       if (browserExists) {
-        console.error(`Browser already running on port ${this.cdpPort}, skipping launch`);
-        // Get existing WebSocket URL
-        const response = await fetch(`http://localhost:${this.cdpPort}/json/version`);
-        const data = await response.json();
-        this.cdpWebSocketUrl = data.webSocketDebuggerUrl;
+        console.error(`DEBUG: Browser already running on port ${this.cdpPort}, skipping launch`);
+        // Get existing page WebSocket URL
+        const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
+        const pages = await listResponse.json();
+
+        if (Array.isArray(pages) && pages.length > 0) {
+          this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
+          console.error(`DEBUG: Using existing page WebSocket: ${this.cdpWebSocketUrl}`);
+        } else {
+          throw new Error('No pages found in existing browser');
+        }
       } else {
-        console.error('Launching new browser instance...');
-        // Launch new browser
-        this.cdpWebSocketUrl = await launchBrowser(chromium, options.headless, this.cdpPort);
-        console.error(`Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
+        console.error('DEBUG: No existing browser found, launching new instance...');
+        // Launch new browser (always visible)
+        this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
+        console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
       }
 
-      this.isMonitoring = true;
+      // Connect to CDP and start monitoring
+      if (this.cdpWebSocketUrl) {
+        try {
+          console.error(`DEBUG: Connecting to CDP WebSocket: ${this.cdpWebSocketUrl}`);
+          this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
+          console.error('DEBUG: CDP WebSocket connected successfully');
+
+          await startNetworkMonitoring(
+            this.cdpWebSocket,
+            this.networkBuffer,
+            options.auto_filter,
+            options.custom_filter
+              ? {
+                  includeUrlPatterns: options.custom_filter.include_url_patterns,
+                  excludeUrlPatterns: options.custom_filter.exclude_url_patterns,
+                  contentTypes: options.custom_filter.content_types,
+                }
+              : undefined,
+            options.max_buffer_size
+          );
+          this.isMonitoring = true;
+          console.error('DEBUG: Network monitoring started successfully');
+        } catch (error) {
+          throw new Error(`Failed to start network monitoring: ${error}`);
+        }
+      } else {
+        throw new Error('CDP WebSocket URL not available');
+      }
 
       const status: MonitorStatus = {
         status: 'started',
@@ -208,8 +240,14 @@ class NetworkMonitorMCP {
   }
 
   private async stopMonitor() {
-    // TODO: Implement actual monitoring stop
+    if (this.cdpWebSocket) {
+      this.cdpWebSocket.close();
+      this.cdpWebSocket = null;
+      console.error('CDP WebSocket connection closed');
+    }
+
     this.isMonitoring = false;
+    this.cdpWebSocketUrl = null;
 
     return {
       content: [
@@ -223,20 +261,84 @@ class NetworkMonitorMCP {
 
   private async getRecentRequests(args: any) {
     try {
-      const _options = GetRecentRequestsSchema.parse(args || {});
+      const options = GetRecentRequestsSchema.parse(args || {});
 
-      // TODO: Implement actual request retrieval
-      const mockResponse = {
-        total_captured: 0,
-        showing: 0,
-        requests: [],
+      // Apply additional filtering if specified
+      let filteredRequests = [...this.networkBuffer];
+
+      if (options.filter) {
+        filteredRequests = filteredRequests.filter((req) => {
+          // Filter by HTTP methods
+          if (options.filter?.methods && options.filter.methods.length > 0) {
+            if (!options.filter.methods.includes(req.method)) {
+              return false;
+            }
+          }
+
+          // Filter by URL pattern
+          if (options.filter?.url_pattern) {
+            try {
+              const regex = new RegExp(options.filter.url_pattern);
+              if (!regex.test(req.url)) {
+                return false;
+              }
+            } catch (error) {
+              console.error(`Invalid URL pattern: ${options.filter.url_pattern}`, error);
+              return false;
+            }
+          }
+
+          // Filter by content type
+          if (options.filter?.content_type && options.filter.content_type.length > 0) {
+            const responseMimeType = req.response?.mimeType;
+            if (!responseMimeType) {
+              return false;
+            }
+
+            const matchesContentType = options.filter.content_type.some((ct) =>
+              responseMimeType.includes(ct)
+            );
+            if (!matchesContentType) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+      }
+
+      // Sort by timestamp (newest first) and limit count
+      filteredRequests.sort((a, b) => b.timestamp - a.timestamp);
+      const limitedRequests = filteredRequests.slice(0, options.count);
+
+      // Remove request/response bodies if not requested
+      const requestsToReturn = limitedRequests.map((req) => {
+        const requestCopy = { ...req };
+
+        if (!options.include_body) {
+          delete requestCopy.body;
+          if (requestCopy.response) {
+            requestCopy.response = {
+              ...requestCopy.response,
+            };
+            delete requestCopy.response.body;
+          }
+        }
+
+        return requestCopy;
+      });
+
+      const response = {
+        total_captured: this.networkBuffer.length,
+        showing: requestsToReturn.length,
+        requests: requestsToReturn,
       };
 
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(mockResponse, null, 2),
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };

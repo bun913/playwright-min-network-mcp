@@ -6,7 +6,6 @@ import { z } from 'zod';
 export const StartMonitorSchema = z.object({
   max_buffer_size: z.number().optional().default(200),
   auto_filter: z.boolean().optional().default(true),
-  headless: z.boolean().optional().default(false),
   cdp_port: z.number().optional().default(9222),
   custom_filter: z
     .object({
@@ -122,7 +121,6 @@ export const DEFAULT_INCLUDE_CONTENT_TYPES = [
  * Browser launch configuration
  */
 export interface BrowserConfig {
-  headless: boolean;
   cdpPort: number;
 }
 
