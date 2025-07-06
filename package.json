@@ -28,6 +28,14 @@
   ],
   "author": "bun913",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bun913/playwright-min-network-mcp.git"
+  },
+  "homepage": "https://github.com/bun913/playwright-min-network-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/bun913/playwright-min-network-mcp/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/inspector": "^0.15.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
