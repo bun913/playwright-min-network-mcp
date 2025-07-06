@@ -12,6 +12,8 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "debug": "npm run build && chmod +x dist/index.js && npx @modelcontextprotocol/inspector dist/index.js",
+    "test": "vitest --watch --reporter=verbose --coverage",
+    "test:ci": "vitest run --coverage --reporter=verbose",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "format": "biome format --write ."
@@ -35,7 +37,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@vitest/coverage-v8": "^3.2.4",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18.0.0"

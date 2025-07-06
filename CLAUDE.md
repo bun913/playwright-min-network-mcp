@@ -12,8 +12,10 @@ See `@docs/technical-requirements.md` for complete specifications.
 - **Quality Gates**: After each file modification, ALWAYS run:
   1. `npm run lint` - Check code quality
   2. `npm run format` - Format code
+  3. `npm run test:ci` - Run tests with coverage
 - **Build**: Always run `npm run build` before testing
 - **Tests**: Validate all 3 tools work correctly
+- **Coverage**: Maintain branch coverage ≥80%
 - **Browser**: Auto-launch Chrome with CDP on port 9222
 - **Memory**: Max 200 network requests in buffer
 
@@ -49,9 +51,14 @@ See `@docs/technical-requirements.md` for complete specifications.
 - TypeScript compilation must pass
 - All linting rules must pass
 - Unit tests must pass (fast execution)
+- Branch coverage ≥80% (verified by `npm run test:ci`)
 - System tests must pass (Playwright integration)
 - All 3 MCP tools must be functional
 - Network filtering must work as specified
+
+## Test Commands
+- **`npm run test`**: Watch mode for development (vitest --watch)
+- **`npm run test:ci`**: Single run with coverage report (vitest run --coverage)
 
 ## Architecture
 - **Entry Point**: `src/index.ts`

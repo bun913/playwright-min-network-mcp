@@ -3,36 +3,22 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-
-// Tool schemas
-const StartMonitorSchema = z.object({
-  max_buffer_size: z.number().optional().default(200),
-  auto_filter: z.boolean().optional().default(true),
-  custom_filter: z
-    .object({
-      include_url_patterns: z.array(z.string()).optional(),
-      exclude_url_patterns: z.array(z.string()).optional(),
-      content_types: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-const GetRecentRequestsSchema = z.object({
-  count: z.number().optional().default(30),
-  filter: z
-    .object({
-      methods: z.array(z.string()).optional(),
-      url_pattern: z.string().optional(),
-      content_type: z.array(z.string()).optional(),
-    })
-    .optional(),
-  include_body: z.boolean().optional().default(true),
-});
+import { chromium } from 'playwright';
+import { checkExistingBrowser, launchBrowser } from './browser.js';
+import {
+  GetRecentRequestsSchema,
+  type MonitorStatus,
+  type NetworkRequest,
+  type StartMonitorOptions,
+  StartMonitorSchema,
+} from './types.js';
 
 class NetworkMonitorMCP {
   private server: Server;
   private isMonitoring = false;
+  private cdpWebSocketUrl: string | null = null;
+  private cdpPort = 9222;
+  private networkBuffer: NetworkRequest[] = [];
 
   constructor() {
     this.server = new Server(
@@ -56,7 +42,8 @@ class NetworkMonitorMCP {
         tools: [
           {
             name: 'start_monitor',
-            description: 'Start network monitoring with auto-launched browser',
+            description:
+              'Start network monitoring with auto-launched browser. Smart filtering excludes static files/CDN/analytics, includes API communications.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -67,27 +54,41 @@ class NetworkMonitorMCP {
                 },
                 auto_filter: {
                   type: 'boolean',
-                  description: 'Enable automatic filtering of requests',
+                  description:
+                    'Enable smart default filtering (excludes static files, CDN assets, analytics; includes JSON, form data, plain text)',
                   default: true,
+                },
+                headless: {
+                  type: 'boolean',
+                  description: 'Run browser in headless mode (false = visible browser)',
+                  default: false,
+                },
+                cdp_port: {
+                  type: 'number',
+                  description: 'Chrome DevTools Protocol port number',
+                  default: 9222,
                 },
                 custom_filter: {
                   type: 'object',
-                  description: 'Custom filtering options',
+                  description: 'Custom filtering rules. Works with auto_filter when both enabled. Example: {"include_url_patterns": ["api\\\\.github\\\\.com"], "content_types": ["application/json"]}',
                   properties: {
                     include_url_patterns: {
                       type: 'array',
                       items: { type: 'string' },
-                      description: 'URL patterns to include',
+                      description:
+                        'Regex patterns for URLs to include (whitelist). Takes precedence over exclude patterns. Example: ["api\\\\.github\\\\.com", "graphql", ".*\\\\.amazonaws\\\\.com"]',
                     },
                     exclude_url_patterns: {
                       type: 'array',
                       items: { type: 'string' },
-                      description: 'URL patterns to exclude',
+                      description:
+                        'Regex patterns for URLs to exclude (blacklist). Applied after include patterns. Example: ["google-analytics", "\\\\.(css|js|png)$", "tracking"]',
                     },
                     content_types: {
                       type: 'array',
                       items: { type: 'string' },
-                      description: 'Content types to include',
+                      description:
+                        'Content-Type headers to include (exact match). Replaces default content types when specified. Example: ["application/json", "text/plain", "application/xml"]',
                     },
                   },
                 },
@@ -163,16 +164,41 @@ class NetworkMonitorMCP {
 
   private async startMonitor(args: any) {
     try {
-      const options = StartMonitorSchema.parse(args || {});
+      const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
+      this.cdpPort = options.cdp_port;
 
-      // TODO: Implement actual browser launch and monitoring
+      // Check if browser is already running
+      const browserExists = await checkExistingBrowser(this.cdpPort);
+
+      if (browserExists) {
+        console.error(`Browser already running on port ${this.cdpPort}, skipping launch`);
+        // Get existing WebSocket URL
+        const response = await fetch(`http://localhost:${this.cdpPort}/json/version`);
+        const data = await response.json();
+        this.cdpWebSocketUrl = data.webSocketDebuggerUrl;
+      } else {
+        console.error('Launching new browser instance...');
+        // Launch new browser
+        this.cdpWebSocketUrl = await launchBrowser(chromium, options.headless, this.cdpPort);
+        console.error(`Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
+      }
+
       this.isMonitoring = true;
+
+      const status: MonitorStatus = {
+        status: 'started',
+        buffer_size: options.max_buffer_size,
+        auto_filter: options.auto_filter,
+        cdp_endpoint: this.cdpWebSocketUrl,
+        cdp_port: this.cdpPort,
+        browser_already_running: browserExists,
+      };
 
       return {
         content: [
           {
             type: 'text',
-            text: `Network monitoring started with buffer size: ${options.max_buffer_size}`,
+            text: JSON.stringify(status, null, 2),
           },
         ],
       };
