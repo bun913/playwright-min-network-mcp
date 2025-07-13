@@ -202,7 +202,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_recent_requests',
             description:
-              'Get recent network requests compact overview with 512B body previews. Always includes body previews for efficient request identification.',
+              'Get recent network requests compact overview with 512B request/response body previews. Shows both request and response body previews separately.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -395,12 +395,12 @@ export class NetworkMonitorMCP {
         urlIncludePatterns: options.filter.url_include_patterns,
         methods: options.filter.methods,
       },
-      20 // Use default buffer size for filter updates
+      30 // Use default buffer size for filter updates
     );
 
     const status: MonitorStatus = {
       status: 'updated',
-      buffer_size: 20,
+      buffer_size: 30,
       filter: {
         contentTypes: options.filter.content_types,
         urlIncludePatterns: options.filter.url_include_patterns,
