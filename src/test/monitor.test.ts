@@ -87,9 +87,15 @@ describe('Network Monitor', () => {
 
       const mockBuffer = [];
 
-      await startNetworkMonitoring(mockWebSocket, mockBuffer, {
-        contentTypes: ['application/json'],
-      });
+      await startNetworkMonitoring(
+        mockWebSocket,
+        mockBuffer,
+        {
+          contentTypes: ['application/json'],
+          urlIncludePatterns: 'all',
+        },
+        new Map()
+      );
 
       // Should enable Network domain
       expect(mockWebSocket.send).toHaveBeenCalledWith(
@@ -113,6 +119,7 @@ describe('Network Monitor', () => {
       };
 
       const mockBuffer = [];
+      const mockPendingRequests = new Map();
       let messageHandler: ((event: MessageEvent) => void) | null = null;
 
       // Capture the message handler
@@ -124,13 +131,19 @@ describe('Network Monitor', () => {
         }
       );
 
-      await startNetworkMonitoring(mockWebSocket, mockBuffer, {
-        contentTypes: ['application/json'],
-        methods: ['GET'], // Explicitly allow GET method
-      });
+      await startNetworkMonitoring(
+        mockWebSocket,
+        mockBuffer,
+        {
+          contentTypes: ['application/json'],
+          urlIncludePatterns: 'all',
+          methods: ['GET'], // Explicitly allow GET method
+        },
+        mockPendingRequests
+      );
 
       // Simulate network request event
-      const mockEvent = {
+      const mockRequestEvent = {
         data: JSON.stringify({
           method: 'Network.requestWillBeSent',
           params: {
@@ -145,8 +158,29 @@ describe('Network Monitor', () => {
         }),
       } as MessageEvent;
 
+      // Simulate network response event
+      const mockResponseEvent = {
+        data: JSON.stringify({
+          method: 'Network.responseReceived',
+          params: {
+            requestId: 'test-request-123',
+            response: {
+              status: 200,
+              statusText: 'OK',
+              url: 'https://api.example.com/data',
+              mimeType: 'application/json',
+              headers: { 'Content-Type': 'application/json' },
+            },
+            timestamp: 1234567891,
+          },
+        }),
+      } as MessageEvent;
+
       if (messageHandler) {
-        messageHandler(mockEvent);
+        // First send request event
+        messageHandler(mockRequestEvent);
+        // Then send response event
+        messageHandler(mockResponseEvent);
       }
 
       expect(mockBuffer).toHaveLength(1);
