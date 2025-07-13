@@ -126,6 +126,7 @@ describe('Network Monitor', () => {
 
       await startNetworkMonitoring(mockWebSocket, mockBuffer, {
         contentTypes: ['application/json'],
+        methods: ['GET'], // Explicitly allow GET method
       });
 
       // Simulate network request event
