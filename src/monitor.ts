@@ -180,6 +180,7 @@ export async function startNetworkMonitoring(
         // Create network request object
         const networkRequest: NetworkRequest = {
           id: requestId,
+          uuid: crypto.randomUUID(), // Generate UUID v4 for external reference
           url: request.url,
           method: request.method,
           headers: request.headers,
