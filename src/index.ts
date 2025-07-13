@@ -57,7 +57,7 @@ export class NetworkMonitorMCP {
                 max_buffer_size: {
                   type: 'number',
                   description: 'Maximum buffer size for storing requests',
-                  default: 20,
+                  default: 30,
                 },
                 cdp_port: {
                   type: 'number',
@@ -202,7 +202,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_recent_requests',
             description:
-              'Get recent network requests compact overview with 512B body previews. Always includes body previews for efficient request identification.',
+              'Get recent network requests compact overview with 512B request/response body previews. Shows both request and response body previews separately.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -270,14 +270,10 @@ export class NetworkMonitorMCP {
       const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
       this.cdpPort = options.cdp_port;
 
-      // Close existing browser server if any
-      if (this.browserServer) {
-        await this.browserServer.close();
-        this.browserServer = null;
+      // Launch browser server only if not already running
+      if (!this.browserServer) {
+        this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
       }
-
-      // Launch fresh browser server
-      this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
 
       // Get CDP WebSocket URL from the debugging port
       const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
@@ -288,6 +284,12 @@ export class NetworkMonitorMCP {
       if (!this.cdpWebSocketUrl) {
         throw new Error('Failed to get WebSocket URL from browser server');
       }
+
+      // Close existing WebSocket connection if switching to a different page
+      if (this.cdpWebSocket && this.cdpWebSocket.readyState === WebSocket.OPEN) {
+        this.cdpWebSocket.close();
+      }
+
       this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
 
       await startNetworkMonitoring(
@@ -393,12 +395,12 @@ export class NetworkMonitorMCP {
         urlIncludePatterns: options.filter.url_include_patterns,
         methods: options.filter.methods,
       },
-      20 // Use default buffer size for filter updates
+      30 // Use default buffer size for filter updates
     );
 
     const status: MonitorStatus = {
       status: 'updated',
-      buffer_size: 20,
+      buffer_size: 30,
       filter: {
         contentTypes: options.filter.content_types,
         urlIncludePatterns: options.filter.url_include_patterns,
@@ -440,17 +442,17 @@ export class NetworkMonitorMCP {
           compact.mimeType = req.response.mimeType;
           compact.responseTimestamp = req.responseTimestamp;
 
-          // Add 512B body preview if body exists
+          // Add 512B response body preview if body exists
           if (req.response.body) {
-            compact.bodyPreview = req.response.body.substring(0, 512);
-            compact.bodySize = req.response.body.length;
+            compact.responseBodyPreview = req.response.body.substring(0, 512);
+            compact.responseBodySize = req.response.body.length;
           }
         }
 
         // Add request body preview if exists
-        if (req.body && !compact.bodyPreview) {
-          compact.bodyPreview = req.body.substring(0, 512);
-          compact.bodySize = req.body.length;
+        if (req.body) {
+          compact.requestBodyPreview = req.body.substring(0, 512);
+          compact.requestBodySize = req.body.length;
         }
 
         return compact;

@@ -192,8 +192,10 @@ describe('NetworkMonitorMCP', () => {
         timestamp: 1000,
         status: 200,
         mimeType: 'application/json',
-        bodyPreview: 'response body data',
-        bodySize: 18,
+        requestBodyPreview: 'request body data',
+        requestBodySize: 17,
+        responseBodyPreview: 'response body data',
+        responseBodySize: 18,
         responseTimestamp: 1001,
       });
     });
@@ -226,9 +228,9 @@ describe('NetworkMonitorMCP', () => {
       const result = await networkMonitor.testGetRecentRequests({});
       const response = JSON.parse(result.content[0].text);
 
-      expect(response.requests[0].bodyPreview).toEqual(expected512B);
-      expect(response.requests[0].bodySize).toEqual(1024);
-      expect(response.requests[0].bodyPreview.length).toEqual(512);
+      expect(response.requests[0].responseBodyPreview).toEqual(expected512B);
+      expect(response.requests[0].responseBodySize).toEqual(1024);
+      expect(response.requests[0].responseBodyPreview.length).toEqual(512);
     });
   });
 

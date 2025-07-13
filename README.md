@@ -176,7 +176,7 @@ Captures API and form data by default:
 
 ## Output Format
 
-**Compact overview** (get_recent_requests) with 512B body previews:
+**Compact overview** (get_recent_requests) with 512B request/response body previews:
 
 ```json
 {
@@ -189,8 +189,10 @@ Captures API and form data by default:
       "status": 200,
       "url": "https://api.github.com/graphql",
       "mimeType": "application/json",
-      "bodyPreview": "{\"query\": \"query GetRepository...",
-      "bodySize": 2048,
+      "requestBodyPreview": "{\"query\": \"query GetRepository...",
+      "requestBodySize": 2048,
+      "responseBodyPreview": "{\"data\": {\"repository\": {...",
+      "responseBodySize": 4096,
       "timestamp": 1641472496000,
       "responseTimestamp": 1641472496123
     }

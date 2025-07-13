@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Network monitoring configuration schema
  */
 export const StartMonitorSchema = z.object({
-  max_buffer_size: z.number().max(50).optional().default(20),
+  max_buffer_size: z.number().max(50).optional().default(30),
   cdp_port: z.number().optional().default(9222),
   filter: z
     .object({
@@ -158,8 +158,10 @@ export interface CompactNetworkRequest {
   status?: number;
   url: string;
   mimeType?: string;
-  bodyPreview?: string; // First 512 bytes of body
-  bodySize?: number; // Full body size in bytes
+  requestBodyPreview?: string; // First 512 bytes of request body
+  requestBodySize?: number; // Full request body size in bytes
+  responseBodyPreview?: string; // First 512 bytes of response body
+  responseBodySize?: number; // Full response body size in bytes
   timestamp: number;
   responseTimestamp?: number;
 }
