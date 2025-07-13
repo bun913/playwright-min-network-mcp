@@ -1,6 +1,6 @@
 # playwright-min-network-mcp
 
-A minimal network monitoring MCP tool for Playwright browser automation. **Just 3 simple tools** to capture, filter, and analyze network traffic during web automation.
+A minimal network monitoring MCP tool for Playwright browser automation. **Just 4 simple tools** to capture, filter, and analyze network traffic during web automation with MCP context efficiency.
 
 ```mermaid
 graph LR
@@ -52,9 +52,10 @@ flowchart TD
 
 ## Features
 
-- **🎯 Minimal Design**: Only 3 tools (`start_or_update_capture`, `stop_monitor`, `get_recent_requests`) - no complexity
+- **🎯 Minimal Design**: Only 4 tools (`start_or_update_capture`, `stop_monitor`, `get_recent_requests`, `get_request_detail`) - no complexity
 - **📡 Network Capture**: Real-time request/response monitoring via Chrome DevTools Protocol
 - **🔍 Smart Filtering**: Early filtering by content-type, URL patterns, and HTTP methods for memory optimization
+- **⚡ MCP Context Efficiency**: UUID-based request detail system reduces context consumption by 90%+
 - **🔄 Dynamic Updates**: Re-run start_or_update_capture to update filters
 - **🤝 Playwright Integration**: Works seamlessly with Playwright MCP during automation
 
@@ -76,8 +77,9 @@ npm install playwright-min-network-mcp
 
 ## Why This Tool?
 
-**🎯 Minimal by Design**: Just 3 tools to capture and analyze network traffic during Playwright automation:
-- **Simple**: `start_or_update_capture` → `get_recent_requests` → `stop_monitor`
+**🎯 Minimal by Design**: Just 4 tools to capture and analyze network traffic during Playwright automation:
+- **Simple**: `start_or_update_capture` → `get_recent_requests` → `get_request_detail` → `stop_monitor`
+- **Context Efficient**: Default `include_body=false` with UUID-based detail lookup prevents context overload
 - **Dynamic**: Re-run `start_or_update_capture` with new settings to update filters
 - **Zero config**: Works immediately with smart defaults
 - **AI-friendly**: Perfect for MCP workflows and automation analysis
@@ -131,15 +133,24 @@ For comprehensive browser automation + network monitoring:
 // 2. Use Playwright MCP to interact with web pages
 // The browser will automatically connect to the same CDP endpoint
 
-// 3. Retrieve captured network requests
+// 3. Retrieve captured network requests (lightweight overview)
 {
   "tool": "get_recent_requests",
   "arguments": {
-    "count": 50
+    "count": 50,
+    "include_body": false
   }
 }
 
-// 4. Stop monitoring when done
+// 4. Get detailed request info by UUID (for specific requests)
+{
+  "tool": "get_request_detail",
+  "arguments": {
+    "uuid": "123e4567-e89b-12d3-a456-426614174000"
+  }
+}
+
+// 5. Stop monitoring when done
 {
   "tool": "stop_monitor"
 }
@@ -243,13 +254,21 @@ No parameters required.
 
 ### get_recent_requests
 
-Retrieve captured network requests.
+Retrieve captured network requests overview. **MCP Context Efficient**: Default `include_body=false` prevents context overload.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `count` | number | 10 | Number of requests to return |
-| `include_body` | boolean | true | Include request/response bodies in output |
+| `include_body` | boolean | **false** | Include request/response bodies (WARNING: may consume large MCP context) |
 | `include_headers` | boolean | false | Include request/response headers in output |
+
+### get_request_detail
+
+Get full details for a specific request by UUID. **Recommended** for viewing request/response bodies efficiently.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `uuid` | string | Yes | UUID v4 of the request to retrieve details for |
 
 
 ## Default Filtering Behavior
@@ -280,25 +299,45 @@ Network requests are returned in this format:
   "requests": [
     {
       "id": "request-123",
+      "uuid": "123e4567-e89b-12d3-a456-426614174000",
       "url": "https://api.github.com/graphql",
       "method": "POST",
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ..."
-      },
       "timestamp": 1641472496000,
       "type": "request",
-      "body": "{\"query\": \"...\"}",
       "response": {
         "status": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "mimeType": "application/json"
       },
       "responseTimestamp": 1641472496123
     }
   ]
+}
+```
+
+**Full request details** (via `get_request_detail` with UUID):
+
+```json
+{
+  "id": "request-123",
+  "uuid": "123e4567-e89b-12d3-a456-426614174000",
+  "url": "https://api.github.com/graphql",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer ..."
+  },
+  "timestamp": 1641472496000,
+  "type": "request",
+  "body": "{\"query\": \"...\"}",
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "mimeType": "application/json",
+    "body": "{\"data\": {...}}"
+  },
+  "responseTimestamp": 1641472496123
 }
 ```
 
