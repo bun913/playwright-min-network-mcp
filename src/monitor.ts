@@ -187,6 +187,8 @@ export async function startNetworkMonitoring(
           return; // Skip this request entirely
         }
 
+        // Skip content-type filtering at request stage - will filter at response stage
+
         // Create network request object
         const networkRequest: NetworkRequest = {
           id: requestId,
@@ -222,11 +224,11 @@ export async function startNetworkMonitoring(
           };
           existingRequest.responseTimestamp = timestamp;
 
-          // Apply filtering now that we have response data
+          // Apply content-type filtering at response stage
           const shouldInclude = shouldIncludeRequest(response.mimeType, filter);
 
           if (!shouldInclude) {
-            // Remove from buffer if it doesn't pass filter
+            // Remove from buffer if it doesn't pass content-type filter
             const index = buffer.findIndex((req) => req.id === requestId);
             if (index !== -1) {
               buffer.splice(index, 1);

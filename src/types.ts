@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Network monitoring configuration schema
  */
 export const StartMonitorSchema = z.object({
-  max_buffer_size: z.number().max(50).optional().default(20),
+  max_buffer_size: z.number().max(50).optional().default(30),
   cdp_port: z.number().optional().default(9222),
   filter: z
     .object({

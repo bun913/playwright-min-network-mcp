@@ -57,7 +57,7 @@ export class NetworkMonitorMCP {
                 max_buffer_size: {
                   type: 'number',
                   description: 'Maximum buffer size for storing requests',
-                  default: 20,
+                  default: 30,
                 },
                 cdp_port: {
                   type: 'number',
@@ -270,14 +270,10 @@ export class NetworkMonitorMCP {
       const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
       this.cdpPort = options.cdp_port;
 
-      // Close existing browser server if any
-      if (this.browserServer) {
-        await this.browserServer.close();
-        this.browserServer = null;
+      // Launch browser server only if not already running
+      if (!this.browserServer) {
+        this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
       }
-
-      // Launch fresh browser server
-      this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
 
       // Get CDP WebSocket URL from the debugging port
       const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
@@ -288,6 +284,12 @@ export class NetworkMonitorMCP {
       if (!this.cdpWebSocketUrl) {
         throw new Error('Failed to get WebSocket URL from browser server');
       }
+
+      // Close existing WebSocket connection if switching to a different page
+      if (this.cdpWebSocket && this.cdpWebSocket.readyState === WebSocket.OPEN) {
+        this.cdpWebSocket.close();
+      }
+
       this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
 
       await startNetworkMonitoring(
