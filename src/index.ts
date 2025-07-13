@@ -8,6 +8,8 @@ import { launchBrowserServer } from './browser.js';
 import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
   GetRecentRequestsSchema,
+  type GetRequestDetailOptions,
+  GetRequestDetailSchema,
   type MonitorStatus,
   type NetworkRequest,
   type StartMonitorOptions,
@@ -116,7 +118,8 @@ export class NetworkMonitorMCP {
           },
           {
             name: 'get_recent_requests',
-            description: 'Get recent network requests',
+            description:
+              'Get recent network requests overview. For MCP context efficiency, use include_body=false (default) and get_request_detail for specific requests.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -127,8 +130,9 @@ export class NetworkMonitorMCP {
                 },
                 include_body: {
                   type: 'boolean',
-                  description: 'Include request/response bodies',
-                  default: true,
+                  description:
+                    'Include request/response bodies (WARNING: may consume large MCP context)',
+                  default: false,
                 },
                 include_headers: {
                   type: 'boolean',
@@ -136,6 +140,22 @@ export class NetworkMonitorMCP {
                   default: false,
                 },
               },
+            },
+          },
+          {
+            name: 'get_request_detail',
+            description:
+              'Get full details for a specific request by UUID. Recommended for viewing request/response bodies efficiently.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                uuid: {
+                  type: 'string',
+                  description: 'UUID of the request to retrieve details for',
+                  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+                },
+              },
+              required: ['uuid'],
             },
           },
         ],
@@ -152,6 +172,8 @@ export class NetworkMonitorMCP {
           return this.stopMonitor();
         case 'get_recent_requests':
           return this.getRecentRequests(args);
+        case 'get_request_detail':
+          return this.getRequestDetail(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -291,6 +313,46 @@ export class NetworkMonitorMCP {
       };
     } catch (error) {
       throw new Error(`Failed to get recent requests: ${error}`);
+    }
+  }
+
+  private async getRequestDetail(args: any) {
+    try {
+      const options: GetRequestDetailOptions = GetRequestDetailSchema.parse(args || {});
+
+      // Find request by UUID
+      const request = this.networkBuffer.find((req) => req.uuid === options.uuid);
+
+      if (!request) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  error: 'Request not found',
+                  uuid: options.uuid,
+                  message: 'No request found with the specified UUID in the current buffer',
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      // Return full request details
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(request, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to get request detail: ${error}`);
     }
   }
 

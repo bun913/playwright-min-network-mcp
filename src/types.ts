@@ -34,8 +34,12 @@ export const StartMonitorSchema = z.object({
 
 export const GetRecentRequestsSchema = z.object({
   count: z.number().optional().default(10),
-  include_body: z.boolean().optional().default(true),
+  include_body: z.boolean().optional().default(false),
   include_headers: z.boolean().optional().default(false),
+});
+
+export const GetRequestDetailSchema = z.object({
+  uuid: z.string().uuid('Must be a valid UUID v4'),
 });
 
 /**
@@ -43,12 +47,14 @@ export const GetRecentRequestsSchema = z.object({
  */
 export type StartMonitorOptions = z.infer<typeof StartMonitorSchema>;
 export type GetRecentRequestsOptions = z.infer<typeof GetRecentRequestsSchema>;
+export type GetRequestDetailOptions = z.infer<typeof GetRequestDetailSchema>;
 
 /**
  * Network request data structure
  */
 export interface NetworkRequest {
   id: string;
+  uuid: string; // UUID v4 for external reference
   url: string;
   method: string;
   headers: Record<string, string>;

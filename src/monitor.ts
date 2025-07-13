@@ -2,6 +2,7 @@
  * Network monitoring functions for CDP integration
  */
 
+import { randomUUID } from 'node:crypto';
 import type { FilterConfig, NetworkRequest } from './types.js';
 
 /**
@@ -180,6 +181,7 @@ export async function startNetworkMonitoring(
         // Create network request object
         const networkRequest: NetworkRequest = {
           id: requestId,
+          uuid: randomUUID(), // Generate UUID v4 for external reference
           url: request.url,
           method: request.method,
           headers: request.headers,

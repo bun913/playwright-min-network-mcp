@@ -30,6 +30,10 @@ describe('NetworkMonitorMCP', () => {
         return this.getRecentRequests(args);
       }
 
+      public async testGetRequestDetail(args: any) {
+        return this.getRequestDetail(args);
+      }
+
       public setNetworkBuffer(buffer: NetworkRequest[]) {
         this.networkBuffer = buffer;
       }
@@ -52,6 +56,7 @@ describe('NetworkMonitorMCP', () => {
       const mockRequests: NetworkRequest[] = [
         {
           id: '1',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
           url: 'https://api.example.com/old',
           method: 'GET',
           headers: {},
@@ -60,6 +65,7 @@ describe('NetworkMonitorMCP', () => {
         },
         {
           id: '2',
+          uuid: '123e4567-e89b-12d3-a456-426614174001',
           url: 'https://api.example.com/new',
           method: 'GET',
           headers: {},
@@ -81,6 +87,7 @@ describe('NetworkMonitorMCP', () => {
     it('should limit results based on count parameter', async () => {
       const mockRequests: NetworkRequest[] = Array.from({ length: 5 }, (_, i) => ({
         id: `${i + 1}`,
+        uuid: `123e4567-e89b-12d3-a456-42661417400${i}`,
         url: `https://api.example.com/${i + 1}`,
         method: 'GET',
         headers: {},
@@ -101,6 +108,7 @@ describe('NetworkMonitorMCP', () => {
       const mockRequests: NetworkRequest[] = [
         {
           id: '1',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
           url: 'https://api.example.com/data',
           method: 'POST',
           headers: {},
@@ -130,6 +138,7 @@ describe('NetworkMonitorMCP', () => {
       const mockRequests: NetworkRequest[] = [
         {
           id: '1',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
           url: 'https://api.example.com/data',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -155,6 +164,7 @@ describe('NetworkMonitorMCP', () => {
       const mockRequests: NetworkRequest[] = [
         {
           id: '1',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
           url: 'https://api.example.com/data',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -176,6 +186,50 @@ describe('NetworkMonitorMCP', () => {
 
       expect(response.requests[0].headers).toEqual({ 'Content-Type': 'application/json' });
       expect(response.requests[0].response?.headers).toEqual({ Server: 'nginx' });
+    });
+  });
+
+  describe('getRequestDetail', () => {
+    it('should return full request details for valid UUID', async () => {
+      const mockRequest: NetworkRequest = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/data',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        timestamp: 1000,
+        type: 'request',
+        body: 'request body',
+        response: {
+          status: 200,
+          headers: { Server: 'nginx' },
+          mimeType: 'application/json',
+          body: 'response body',
+        },
+      };
+
+      networkMonitor.setNetworkBuffer([mockRequest]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response).toEqual(mockRequest);
+    });
+
+    it('should return error for non-existent UUID', async () => {
+      networkMonitor.setNetworkBuffer([]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174999',
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.error).toBe('Request not found');
+      expect(response.uuid).toBe('123e4567-e89b-12d3-a456-426614174999');
+    });
+
+    it('should return error for invalid UUID format', async () => {
+      await expect(networkMonitor.testGetRequestDetail({ uuid: 'invalid-uuid' })).rejects.toThrow();
     });
   });
 });
