@@ -54,8 +54,9 @@ flowchart TD
 
 - **🎯 Minimal Design**: Only 4 tools (`start_or_update_capture`, `stop_monitor`, `get_recent_requests`, `get_request_detail`) - no complexity
 - **📡 Network Capture**: Real-time request/response monitoring via Chrome DevTools Protocol
-- **🔍 Smart Filtering**: Early filtering by content-type, URL patterns, and HTTP methods for memory optimization
-- **⚡ MCP Context Efficiency**: UUID-based request detail system reduces context consumption by 90%+
+- **🔍 Smart Filtering**: URL include patterns, content-type, and HTTP method filtering for targeted monitoring
+- **⚡ MCP Context Efficiency**: 512B body previews + 50KB detail limits prevent context overflow
+- **🛡️ Safe Scaling**: Handles large responses (67KB+) without MCP token limit violations
 - **🔄 Dynamic Updates**: Re-run start_or_update_capture to update filters
 - **🤝 Playwright Integration**: Works seamlessly with Playwright MCP during automation
 
@@ -79,7 +80,8 @@ npm install playwright-min-network-mcp
 
 **🎯 Minimal by Design**: Just 4 tools to capture and analyze network traffic during Playwright automation:
 - **Simple**: `start_or_update_capture` → `get_recent_requests` → `get_request_detail` → `stop_monitor`
-- **Context Efficient**: Default `include_body=false` with UUID-based detail lookup prevents context overload
+- **Context Safe**: 512B body previews + 50KB detail limits prevent MCP token overflow
+- **Smart Filtering**: URL include patterns (`["api/", "/graphql"]`) for targeted monitoring
 - **Dynamic**: Re-run `start_or_update_capture` with new settings to update filters
 - **Zero config**: Works immediately with smart defaults
 - **AI-friendly**: Perfect for MCP workflows and automation analysis
@@ -133,20 +135,20 @@ For comprehensive browser automation + network monitoring:
 // 2. Use Playwright MCP to interact with web pages
 // The browser will automatically connect to the same CDP endpoint
 
-// 3. Retrieve captured network requests (lightweight overview)
+// 3. Retrieve captured network requests (compact overview with 512B previews)
 {
   "tool": "get_recent_requests",
   "arguments": {
-    "count": 50,
-    "include_body": false
+    "count": 50
   }
 }
 
-// 4. Get detailed request info by UUID (for specific requests)
+// 4. Get detailed request info by UUID (limited to 50KB, headers optional)
 {
   "tool": "get_request_detail",
   "arguments": {
-    "uuid": "123e4567-e89b-12d3-a456-426614174000"
+    "uuid": "123e4567-e89b-12d3-a456-426614174000",
+    "include_headers": false
   }
 }
 
@@ -207,16 +209,16 @@ Control which types of network requests to capture:
 }
 ```
 
-### Advanced URL and Method Filtering
+### URL Include Patterns and Method Filtering
 
 ```json
-// URL pattern and HTTP method filtering at capture time
+// URL include patterns and HTTP method filtering at capture time
 {
   "tool": "start_or_update_capture",
   "arguments": {
     "filter": {
       "content_types": ["application/json"],
-      "url_exclude_patterns": ["\\.css$", "\\.js$", "\\.png$", "analytics"],
+      "url_include_patterns": ["api/", "/graphql", "/v1/"],
       "methods": ["POST", "PUT", "DELETE"]
     }
   }
@@ -228,6 +230,7 @@ Control which types of network requests to capture:
   "arguments": {
     "filter": {
       "content_types": ["application/json", "text/html"],
+      "url_include_patterns": ["https://api.github.com/", "https://zenn.dev/api/"],
       "methods": ["GET", "POST"]
     }
   }
@@ -245,6 +248,8 @@ Start network capture or update filter settings with auto-launched browser.
 | `max_buffer_size` | number | 20 | Maximum number of requests to store in memory |
 | `cdp_port` | number | 9222 | Chrome DevTools Protocol port number |
 | `filter.content_types` | string[] \| "all" | `["application/json", ...]` | Content types to capture |
+| `filter.url_include_patterns` | string[] \| "all" | `"all"` | URL patterns to include (e.g., `["api/", "/graphql"]`) |
+| `filter.methods` | string[] | undefined | HTTP methods to include (e.g., `["GET", "POST"]`) |
 
 ### stop_monitor
 
@@ -254,21 +259,21 @@ No parameters required.
 
 ### get_recent_requests
 
-Retrieve captured network requests overview. **MCP Context Efficient**: Default `include_body=false` prevents context overload.
+Retrieve captured network requests compact overview. **Always includes 512B body previews** for efficient request identification.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `count` | number | 10 | Number of requests to return |
-| `include_body` | boolean | **false** | Include request/response bodies (WARNING: may consume large MCP context) |
 | `include_headers` | boolean | false | Include request/response headers in output |
 
 ### get_request_detail
 
-Get full details for a specific request by UUID. **Recommended** for viewing request/response bodies efficiently.
+Get full details for a specific request by UUID. **Body limited to 50KB** to prevent MCP context overflow.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `uuid` | string | Yes | UUID v4 of the request to retrieve details for |
+| `include_headers` | boolean | No (default: false) | Include request/response headers (excluded by default for context efficiency) |
 
 
 ## Default Filtering Behavior
@@ -290,7 +295,7 @@ Get full details for a specific request by UUID. **Recommended** for viewing req
 
 ## Output Format
 
-Network requests are returned in this format:
+**Compact overview** (get_recent_requests) with 512B body previews:
 
 ```json
 {
@@ -298,23 +303,21 @@ Network requests are returned in this format:
   "showing": 30,
   "requests": [
     {
-      "id": "request-123",
       "uuid": "123e4567-e89b-12d3-a456-426614174000",
-      "url": "https://api.github.com/graphql",
       "method": "POST",
+      "status": 200,
+      "url": "https://api.github.com/graphql",
+      "mimeType": "application/json",
+      "bodyPreview": "{\"query\": \"query GetRepository...",
+      "bodySize": 2048,
       "timestamp": 1641472496000,
-      "type": "request",
-      "response": {
-        "status": 200,
-        "mimeType": "application/json"
-      },
       "responseTimestamp": 1641472496123
     }
   ]
 }
 ```
 
-**Full request details** (via `get_request_detail` with UUID):
+**Full request details** (via `get_request_detail` with UUID, limited to 50KB):
 
 ```json
 {
@@ -322,24 +325,21 @@ Network requests are returned in this format:
   "uuid": "123e4567-e89b-12d3-a456-426614174000",
   "url": "https://api.github.com/graphql",
   "method": "POST",
-  "headers": {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer ..."
-  },
+  "headers": undefined,
   "timestamp": 1641472496000,
   "type": "request",
-  "body": "{\"query\": \"...\"}",
+  "body": "{\"query\": \"query GetRepository($owner: String!, $name: String!) { ... }\"}",
   "response": {
     "status": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
+    "headers": undefined,
     "mimeType": "application/json",
-    "body": "{\"data\": {...}}"
+    "body": "{\"data\": {\"repository\": {...}}} \n... [truncated from 67647 bytes]"
   },
   "responseTimestamp": 1641472496123
 }
 ```
+
+**Note**: Headers excluded by default for context efficiency. Large bodies (>50KB) are truncated with size indication.
 
 
 ## Browser Integration

@@ -153,7 +153,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_request_detail',
             description:
-              'Get full details for a specific request by UUID. Returns complete request/response data with optional headers.',
+              'Get full details for a specific request by UUID. Returns complete request/response data with 50KB body limit and optional headers to prevent MCP context overflow.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -364,7 +364,7 @@ export class NetworkMonitorMCP {
         };
       }
 
-      // Return request details (headers optional)
+      // Return request details (headers optional, body limited to 50KB)
       const requestCopy: any = { ...request };
 
       if (!options.include_headers) {
@@ -373,6 +373,23 @@ export class NetworkMonitorMCP {
           requestCopy.response = { ...requestCopy.response };
           requestCopy.response.headers = undefined;
         }
+      }
+
+      // Limit body sizes to 50KB to prevent MCP context overflow
+      const MAX_BODY_SIZE = 50 * 1024; // 50KB
+
+      if (requestCopy.body && requestCopy.body.length > MAX_BODY_SIZE) {
+        const originalSize = requestCopy.body.length;
+        requestCopy.body =
+          requestCopy.body.substring(0, MAX_BODY_SIZE) +
+          `\n... [truncated from ${originalSize} bytes]`;
+      }
+
+      if (requestCopy.response?.body && requestCopy.response.body.length > MAX_BODY_SIZE) {
+        const originalSize = requestCopy.response.body.length;
+        requestCopy.response.body =
+          requestCopy.response.body.substring(0, MAX_BODY_SIZE) +
+          `\n... [truncated from ${originalSize} bytes]`;
       }
 
       return {

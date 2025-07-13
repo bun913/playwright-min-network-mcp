@@ -305,6 +305,105 @@ describe('NetworkMonitorMCP', () => {
       expect(response).toEqual(mockRequest);
     });
 
+    it('should truncate large request body to 50KB', async () => {
+      // Create 60KB test string
+      const largeBody = 'A'.repeat(60 * 1024);
+      const expected50KB = 'A'.repeat(50 * 1024);
+
+      const mockRequest: NetworkRequest = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/large-request',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        timestamp: 1000,
+        type: 'request',
+        body: largeBody,
+        response: {
+          status: 200,
+          headers: { Server: 'nginx' },
+          mimeType: 'application/json',
+          body: 'small response',
+        },
+      };
+
+      networkMonitor.setNetworkBuffer([mockRequest]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        include_headers: true,
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.body).toEqual(`${expected50KB}\n... [truncated from 61440 bytes]`);
+      expect(response.response.body).toEqual('small response'); // Not truncated
+    });
+
+    it('should truncate large response body to 50KB', async () => {
+      // Create 80KB test string
+      const largeResponseBody = 'B'.repeat(80 * 1024);
+      const expected50KB = 'B'.repeat(50 * 1024);
+
+      const mockRequest: NetworkRequest = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/large-response',
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        timestamp: 1000,
+        type: 'request',
+        body: 'small request',
+        response: {
+          status: 200,
+          headers: { Server: 'nginx' },
+          mimeType: 'application/json',
+          body: largeResponseBody,
+        },
+      };
+
+      networkMonitor.setNetworkBuffer([mockRequest]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        include_headers: true,
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.body).toEqual('small request'); // Not truncated
+      expect(response.response.body).toEqual(`${expected50KB}\n... [truncated from 81920 bytes]`);
+    });
+
+    it('should not truncate bodies smaller than 50KB', async () => {
+      // Create 30KB test string
+      const mediumBody = 'C'.repeat(30 * 1024);
+
+      const mockRequest: NetworkRequest = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/medium-size',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        timestamp: 1000,
+        type: 'request',
+        body: mediumBody,
+        response: {
+          status: 200,
+          headers: { Server: 'nginx' },
+          mimeType: 'application/json',
+          body: mediumBody,
+        },
+      };
+
+      networkMonitor.setNetworkBuffer([mockRequest]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        include_headers: true,
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.body).toEqual(mediumBody); // Not truncated
+      expect(response.response.body).toEqual(mediumBody); // Not truncated
+      expect(response.body).not.toContain('truncated'); // No truncation message
+    });
+
     it('should return error for non-existent UUID', async () => {
       networkMonitor.setNetworkBuffer([]);
       const result = await networkMonitor.testGetRequestDetail({
