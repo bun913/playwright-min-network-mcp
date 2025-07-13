@@ -5,36 +5,6 @@
 import type { FilterConfig, NetworkRequest } from './types.js';
 
 /**
- * Update filter configuration and re-evaluate existing buffer
- * @param buffer Array of existing network requests
- * @param newFilter New filter configuration
- * @returns Number of requests removed from buffer
- */
-export function updateFilterConfig(buffer: NetworkRequest[], newFilter: FilterConfig): number {
-  const initialLength = buffer.length;
-
-  // Apply early filtering to existing requests
-  for (let i = buffer.length - 1; i >= 0; i--) {
-    const request = buffer[i];
-
-    // Check early filtering (URL and method)
-    if (!shouldIncludeRequestByUrlAndMethod(request.url, request.method, newFilter)) {
-      buffer.splice(i, 1);
-      continue;
-    }
-
-    // Check content-type filtering if response exists
-    if (request.response) {
-      if (!shouldIncludeRequest(request.response.mimeType, newFilter)) {
-        buffer.splice(i, 1);
-      }
-    }
-  }
-
-  return initialLength - buffer.length;
-}
-
-/**
  * Check if filter configuration is too permissive and show warnings
  * @param filter Filter configuration to validate
  */
@@ -69,7 +39,7 @@ export function validateAndWarnFilter(filter: FilterConfig): void {
     for (const warning of warnings) {
       console.warn(warning);
     }
-    console.warn('   Use update_filter tool to adjust filters without restarting monitoring');
+    console.warn('   Re-run start_or_update_capture with new filter settings to adjust filters');
   }
 }
 

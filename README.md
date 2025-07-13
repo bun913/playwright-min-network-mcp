@@ -52,9 +52,10 @@ flowchart TD
 
 ## Features
 
-- **🎯 Minimal Design**: Only 3 tools (`start_monitor`, `stop_monitor`, `get_recent_requests`) - no complexity
+- **🎯 Minimal Design**: Only 3 tools (`start_or_update_capture`, `stop_monitor`, `get_recent_requests`) - no complexity
 - **📡 Network Capture**: Real-time request/response monitoring via Chrome DevTools Protocol
-- **🔍 Smart Filtering**: Content-type based filtering to focus on API calls and meaningful traffic
+- **🔍 Smart Filtering**: Early filtering by content-type, URL patterns, and HTTP methods for memory optimization
+- **🔄 Dynamic Updates**: Re-run start_or_update_capture to update filters
 - **🤝 Playwright Integration**: Works seamlessly with Playwright MCP during automation
 
 ## Prerequisites
@@ -76,7 +77,8 @@ npm install playwright-min-network-mcp
 ## Why This Tool?
 
 **🎯 Minimal by Design**: Just 3 tools to capture and analyze network traffic during Playwright automation:
-- **Simple**: `start_monitor` → `get_recent_requests` → `stop_monitor`
+- **Simple**: `start_or_update_capture` → `get_recent_requests` → `stop_monitor`
+- **Dynamic**: Re-run `start_or_update_capture` with new settings to update filters
 - **Zero config**: Works immediately with smart defaults
 - **AI-friendly**: Perfect for MCP workflows and automation analysis
 
@@ -123,7 +125,7 @@ For comprehensive browser automation + network monitoring:
 ```json
 // 1. Start monitoring (launches visible Chrome browser)
 {
-  "tool": "start_monitor"
+  "tool": "start_or_update_capture"
 }
 
 // 2. Use Playwright MCP to interact with web pages
@@ -150,7 +152,7 @@ Control which types of network requests to capture:
 ```json
 // Default: API and form data only
 {
-  "tool": "start_monitor",
+  "tool": "start_or_update_capture",
   "arguments": {
     "filter": {
       "content_types": [
@@ -165,7 +167,7 @@ Control which types of network requests to capture:
 
 // Include everything (CSS, JS, images, etc.)
 {
-  "tool": "start_monitor",
+  "tool": "start_or_update_capture",
   "arguments": {
     "filter": {
       "content_types": "all"
@@ -175,7 +177,7 @@ Control which types of network requests to capture:
 
 // Include nothing (disable monitoring)
 {
-  "tool": "start_monitor",
+  "tool": "start_or_update_capture",
   "arguments": {
     "filter": {
       "content_types": []
@@ -185,7 +187,7 @@ Control which types of network requests to capture:
 
 // Custom content types
 {
-  "tool": "start_monitor",
+  "tool": "start_or_update_capture",
   "arguments": {
     "filter": {
       "content_types": ["application/json", "application/xml"]
@@ -194,33 +196,42 @@ Control which types of network requests to capture:
 }
 ```
 
-### Advanced Filtering on Retrieval
+### Advanced URL and Method Filtering
 
 ```json
-// Filter requests when retrieving
+// URL pattern and HTTP method filtering at capture time
 {
-  "tool": "get_recent_requests",
+  "tool": "start_or_update_capture",
   "arguments": {
-    "count": 30,
     "filter": {
-      "methods": ["POST", "PUT", "DELETE"],
-      "url_pattern": "api\\.github\\.com",
-      "content_type": ["application/json"]
-    },
-    "include_body": true
+      "content_types": ["application/json"],
+      "url_exclude_patterns": ["\\.css$", "\\.js$", "\\.png$", "analytics"],
+      "methods": ["POST", "PUT", "DELETE"]
+    }
+  }
+}
+
+// Update filters by re-running with new settings
+{
+  "tool": "start_or_update_capture",
+  "arguments": {
+    "filter": {
+      "content_types": ["application/json", "text/html"],
+      "methods": ["GET", "POST"]
+    }
   }
 }
 ```
 
 ## API Reference
 
-### start_monitor
+### start_or_update_capture
 
-Start network monitoring and launch browser if needed.
+Start network capture or update filter settings with auto-launched browser.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `max_buffer_size` | number | 200 | Maximum number of requests to store in memory |
+| `max_buffer_size` | number | 20 | Maximum number of requests to store in memory |
 | `cdp_port` | number | 9222 | Chrome DevTools Protocol port number |
 | `filter.content_types` | string[] \| "all" | `["application/json", ...]` | Content types to capture |
 
@@ -232,16 +243,14 @@ No parameters required.
 
 ### get_recent_requests
 
-Retrieve captured network requests with optional filtering.
+Retrieve captured network requests.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `count` | number | 30 | Number of requests to return (max: 200) |
-| `filter.methods` | string[] | all methods | HTTP methods to include |
-| `filter.url_pattern` | string | none | Regular expression for URL filtering |
-| `filter.content_type` | string[] | none | Content types to include |
+| `count` | number | 10 | Number of requests to return |
 | `include_body` | boolean | true | Include request/response bodies in output |
 | `include_headers` | boolean | false | Include request/response headers in output |
+
 
 ## Default Filtering Behavior
 

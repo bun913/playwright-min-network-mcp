@@ -38,20 +38,11 @@ export const GetRecentRequestsSchema = z.object({
   include_headers: z.boolean().optional().default(false),
 });
 
-export const UpdateFilterSchema = z.object({
-  filter: z.object({
-    content_types: z.union([z.array(z.string()), z.literal('all')]).optional(),
-    url_exclude_patterns: z.array(z.string()).optional(),
-    methods: z.array(z.string()).optional(),
-  }),
-});
-
 /**
  * Infer TypeScript types from schemas
  */
 export type StartMonitorOptions = z.infer<typeof StartMonitorSchema>;
 export type GetRecentRequestsOptions = z.infer<typeof GetRecentRequestsSchema>;
-export type UpdateFilterOptions = z.infer<typeof UpdateFilterSchema>;
 
 /**
  * Network request data structure

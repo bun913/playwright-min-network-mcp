@@ -5,20 +5,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
 import { launchBrowserServer } from './browser.js';
-import {
-  connectToCdp,
-  startNetworkMonitoring,
-  updateFilterConfig,
-  validateAndWarnFilter,
-} from './monitor.js';
+import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
   GetRecentRequestsSchema,
   type MonitorStatus,
   type NetworkRequest,
   type StartMonitorOptions,
   StartMonitorSchema,
-  type UpdateFilterOptions,
-  UpdateFilterSchema,
 } from './types.js';
 
 export class NetworkMonitorMCP {
@@ -51,9 +44,9 @@ export class NetworkMonitorMCP {
       return {
         tools: [
           {
-            name: 'start_monitor',
+            name: 'start_or_update_capture',
             description:
-              'Start network monitoring with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
+              'Start network capture or update filter settings with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -145,48 +138,6 @@ export class NetworkMonitorMCP {
               },
             },
           },
-          {
-            name: 'update_filter',
-            description: 'Update filter configuration and re-evaluate existing buffer',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                filter: {
-                  type: 'object',
-                  description: 'New filter configuration to apply',
-                  properties: {
-                    content_types: {
-                      oneOf: [
-                        {
-                          type: 'array',
-                          items: { type: 'string' },
-                          description: 'Array of content-type patterns to include',
-                        },
-                        {
-                          type: 'string',
-                          enum: ['all'],
-                          description: 'Special value "all" to capture all content types',
-                        },
-                      ],
-                      description: 'Content types to capture',
-                    },
-                    url_exclude_patterns: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Array of URL patterns to exclude',
-                    },
-                    methods: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Array of HTTP methods to include',
-                    },
-                  },
-                  required: [],
-                },
-              },
-              required: ['filter'],
-            },
-          },
         ],
       };
     });
@@ -195,14 +146,12 @@ export class NetworkMonitorMCP {
       const { name, arguments: args } = request.params;
 
       switch (name) {
-        case 'start_monitor':
+        case 'start_or_update_capture':
           return this.startMonitor(args);
         case 'stop_monitor':
           return this.stopMonitor();
         case 'get_recent_requests':
           return this.getRecentRequests(args);
-        case 'update_filter':
-          return this.updateFilter(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -342,47 +291,6 @@ export class NetworkMonitorMCP {
       };
     } catch (error) {
       throw new Error(`Failed to get recent requests: ${error}`);
-    }
-  }
-
-  private async updateFilter(args: any) {
-    try {
-      if (!this.isMonitoring) {
-        throw new Error('Monitoring is not active. Start monitoring first with start_monitor.');
-      }
-
-      const options: UpdateFilterOptions = UpdateFilterSchema.parse(args || {});
-
-      // Convert to FilterConfig format
-      const newFilter = {
-        contentTypes: options.filter.content_types || ['application/json'],
-        urlExcludePatterns: options.filter.url_exclude_patterns,
-        methods: options.filter.methods,
-      };
-
-      // Validate and warn about filter configuration
-      validateAndWarnFilter(newFilter);
-
-      // Update filter and re-evaluate existing buffer
-      const removedCount = updateFilterConfig(this.networkBuffer, newFilter);
-
-      const response = {
-        status: 'filter_updated',
-        requests_removed: removedCount,
-        remaining_requests: this.networkBuffer.length,
-        new_filter: newFilter,
-      };
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(response, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      throw new Error(`Failed to update filter: ${error}`);
     }
   }
 
