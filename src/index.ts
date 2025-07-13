@@ -4,7 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
-import { checkExistingBrowser, launchBrowser } from './browser.js';
+import { ensureBrowserVisible } from './browser.js';
 import {
   connectToCdp,
   startNetworkMonitoring,
@@ -213,61 +213,23 @@ export class NetworkMonitorMCP {
       const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
       this.cdpPort = options.cdp_port;
 
-      // Check if browser is already running
-      console.error(`DEBUG: Checking for existing browser on port ${this.cdpPort}...`);
-      const browserExists = await checkExistingBrowser(this.cdpPort);
-
-      if (browserExists) {
-        console.error(`DEBUG: Browser already running on port ${this.cdpPort}, skipping launch`);
-        // Get existing page WebSocket URL
-        const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
-        const pages = await listResponse.json();
-
-        if (Array.isArray(pages) && pages.length > 0) {
-          this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
-          console.error(`DEBUG: Using existing page WebSocket: ${this.cdpWebSocketUrl}`);
-        } else {
-          console.error(
-            `DEBUG: Browser running on port ${this.cdpPort} but no active pages found. Cleaning up and launching new instance...`
-          );
-          // Clean up any existing monitoring state
-          await this.stopMonitor();
-          // Launch new browser
-          this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
-          console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
-        }
-      } else {
-        console.error('DEBUG: No existing browser found, launching new instance...');
-        // Launch new browser (always visible)
-        this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
-        console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
-      }
+      // Ensure browser is visible and get WebSocket URL
+      this.cdpWebSocketUrl = await ensureBrowserVisible(chromium, this.cdpPort);
 
       // Connect to CDP and start monitoring
-      if (this.cdpWebSocketUrl) {
-        try {
-          console.error(`DEBUG: Connecting to CDP WebSocket: ${this.cdpWebSocketUrl}`);
-          this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
-          console.error('DEBUG: CDP WebSocket connected successfully');
+      this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
 
-          await startNetworkMonitoring(
-            this.cdpWebSocket,
-            this.networkBuffer,
-            {
-              contentTypes: options.filter.content_types,
-              urlExcludePatterns: options.filter.url_exclude_patterns,
-              methods: options.filter.methods,
-            },
-            options.max_buffer_size
-          );
-          this.isMonitoring = true;
-          console.error('DEBUG: Network monitoring started successfully');
-        } catch (error) {
-          throw new Error(`Failed to start network monitoring: ${error}`);
-        }
-      } else {
-        throw new Error('CDP WebSocket URL not available');
-      }
+      await startNetworkMonitoring(
+        this.cdpWebSocket,
+        this.networkBuffer,
+        {
+          contentTypes: options.filter.content_types,
+          urlExcludePatterns: options.filter.url_exclude_patterns,
+          methods: options.filter.methods,
+        },
+        options.max_buffer_size
+      );
+      this.isMonitoring = true;
 
       const status: MonitorStatus = {
         status: 'started',
@@ -277,7 +239,7 @@ export class NetworkMonitorMCP {
         },
         cdp_endpoint: this.cdpWebSocketUrl,
         cdp_port: this.cdpPort,
-        browser_already_running: browserExists,
+        browser_already_running: false, // Always false with new implementation
       };
 
       return {
