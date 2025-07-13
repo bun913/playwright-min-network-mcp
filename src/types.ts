@@ -158,8 +158,10 @@ export interface CompactNetworkRequest {
   status?: number;
   url: string;
   mimeType?: string;
-  bodyPreview?: string; // First 512 bytes of body
-  bodySize?: number; // Full body size in bytes
+  requestBodyPreview?: string; // First 512 bytes of request body
+  requestBodySize?: number; // Full request body size in bytes
+  responseBodyPreview?: string; // First 512 bytes of response body
+  responseBodySize?: number; // Full response body size in bytes
   timestamp: number;
   responseTimestamp?: number;
 }

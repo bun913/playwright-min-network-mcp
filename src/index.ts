@@ -442,17 +442,17 @@ export class NetworkMonitorMCP {
           compact.mimeType = req.response.mimeType;
           compact.responseTimestamp = req.responseTimestamp;
 
-          // Add 512B body preview if body exists
+          // Add 512B response body preview if body exists
           if (req.response.body) {
-            compact.bodyPreview = req.response.body.substring(0, 512);
-            compact.bodySize = req.response.body.length;
+            compact.responseBodyPreview = req.response.body.substring(0, 512);
+            compact.responseBodySize = req.response.body.length;
           }
         }
 
         // Add request body preview if exists
-        if (req.body && !compact.bodyPreview) {
-          compact.bodyPreview = req.body.substring(0, 512);
-          compact.bodySize = req.body.length;
+        if (req.body) {
+          compact.requestBodyPreview = req.body.substring(0, 512);
+          compact.requestBodySize = req.body.length;
         }
 
         return compact;
