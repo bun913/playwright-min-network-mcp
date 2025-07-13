@@ -154,6 +154,7 @@ export async function startNetworkMonitoring(
   ws: WebSocket,
   buffer: NetworkRequest[],
   filter: FilterConfig,
+  pendingRequests: Map<string, NetworkRequest>,
   maxBufferSize = 200
 ): Promise<void> {
   // Enable Network domain
@@ -201,13 +202,8 @@ export async function startNetworkMonitoring(
           body: request.postData,
         };
 
-        // Store temporarily to apply content-type filtering after response is received
-        buffer.push(networkRequest);
-
-        // Maintain buffer size limit
-        if (buffer.length > maxBufferSize) {
-          buffer.shift();
-        }
+        // Store in pending requests map for response-stage filtering
+        pendingRequests.set(requestId, networkRequest);
       }
 
       // Handle Network.responseReceived events
@@ -215,7 +211,7 @@ export async function startNetworkMonitoring(
         const { requestId, response, timestamp } = message.params;
 
         // Find existing request and add response data
-        const existingRequest = buffer.find((req) => req.id === requestId);
+        const existingRequest = pendingRequests.get(requestId);
         if (existingRequest) {
           existingRequest.response = {
             status: response.status,
@@ -227,13 +223,13 @@ export async function startNetworkMonitoring(
           // Apply content-type filtering at response stage
           const shouldInclude = shouldIncludeRequest(response.mimeType, filter);
 
-          if (!shouldInclude) {
-            // Remove from buffer if it doesn't pass content-type filter
-            const index = buffer.findIndex((req) => req.id === requestId);
-            if (index !== -1) {
-              buffer.splice(index, 1);
+          if (shouldInclude) {
+            // Add to final buffer with FIFO control
+            buffer.push(existingRequest);
+            if (buffer.length > maxBufferSize) {
+              buffer.shift();
             }
-          } else {
+
             // Get response body for included requests
             ws.send(
               JSON.stringify({
@@ -243,6 +239,9 @@ export async function startNetworkMonitoring(
               })
             );
           }
+
+          // Clean up pending request
+          pendingRequests.delete(requestId);
         }
       }
 
