@@ -301,8 +301,8 @@ export class NetworkMonitorMCP {
           urlIncludePatterns: options.filter.url_include_patterns,
           methods: options.filter.methods,
         },
-        options.max_buffer_size,
-        this.pendingRequests
+        this.pendingRequests,
+        options.max_buffer_size
       );
       this.isMonitoring = true;
 
@@ -397,8 +397,8 @@ export class NetworkMonitorMCP {
         urlIncludePatterns: options.filter.url_include_patterns,
         methods: options.filter.methods,
       },
-      30, // Use default buffer size for filter updates
-      this.pendingRequests
+      this.pendingRequests,
+      30 // Use default buffer size for filter updates
     );
 
     const status: MonitorStatus = {

@@ -154,8 +154,8 @@ export async function startNetworkMonitoring(
   ws: WebSocket,
   buffer: NetworkRequest[],
   filter: FilterConfig,
-  maxBufferSize = 200,
-  pendingRequests?: Map<string, NetworkRequest>
+  pendingRequests: Map<string, NetworkRequest>,
+  maxBufferSize = 200
 ): Promise<void> {
   // Enable Network domain
   ws.send(
@@ -203,15 +203,7 @@ export async function startNetworkMonitoring(
         };
 
         // Store in pending requests map for response-stage filtering
-        if (pendingRequests) {
-          pendingRequests.set(requestId, networkRequest);
-        } else {
-          // Fallback to old behavior if pendingRequests not provided
-          buffer.push(networkRequest);
-          if (buffer.length > maxBufferSize) {
-            buffer.shift();
-          }
-        }
+        pendingRequests.set(requestId, networkRequest);
       }
 
       // Handle Network.responseReceived events
@@ -219,70 +211,37 @@ export async function startNetworkMonitoring(
         const { requestId, response, timestamp } = message.params;
 
         // Find existing request and add response data
-        let existingRequest: NetworkRequest | undefined;
+        const existingRequest = pendingRequests.get(requestId);
+        if (existingRequest) {
+          existingRequest.response = {
+            status: response.status,
+            headers: response.headers,
+            mimeType: response.mimeType,
+          };
+          existingRequest.responseTimestamp = timestamp;
 
-        if (pendingRequests) {
-          // New pending requests pattern
-          existingRequest = pendingRequests.get(requestId);
-          if (existingRequest) {
-            existingRequest.response = {
-              status: response.status,
-              headers: response.headers,
-              mimeType: response.mimeType,
-            };
-            existingRequest.responseTimestamp = timestamp;
+          // Apply content-type filtering at response stage
+          const shouldInclude = shouldIncludeRequest(response.mimeType, filter);
 
-            // Apply content-type filtering at response stage
-            const shouldInclude = shouldIncludeRequest(response.mimeType, filter);
-
-            if (shouldInclude) {
-              // Add to final buffer with FIFO control
-              buffer.push(existingRequest);
-              if (buffer.length > maxBufferSize) {
-                buffer.shift();
-              }
-
-              // Get response body for included requests
-              ws.send(
-                JSON.stringify({
-                  id: Math.floor(Math.random() * 1000000),
-                  method: 'Network.getResponseBody',
-                  params: { requestId },
-                })
-              );
+          if (shouldInclude) {
+            // Add to final buffer with FIFO control
+            buffer.push(existingRequest);
+            if (buffer.length > maxBufferSize) {
+              buffer.shift();
             }
 
-            // Clean up pending request
-            pendingRequests.delete(requestId);
+            // Get response body for included requests
+            ws.send(
+              JSON.stringify({
+                id: Math.floor(Math.random() * 1000000),
+                method: 'Network.getResponseBody',
+                params: { requestId },
+              })
+            );
           }
-        } else {
-          // Fallback to old behavior
-          existingRequest = buffer.find((req) => req.id === requestId);
-          if (existingRequest) {
-            existingRequest.response = {
-              status: response.status,
-              headers: response.headers,
-              mimeType: response.mimeType,
-            };
-            existingRequest.responseTimestamp = timestamp;
 
-            const shouldInclude = shouldIncludeRequest(response.mimeType, filter);
-
-            if (!shouldInclude) {
-              const index = buffer.findIndex((req) => req.id === requestId);
-              if (index !== -1) {
-                buffer.splice(index, 1);
-              }
-            } else {
-              ws.send(
-                JSON.stringify({
-                  id: Math.floor(Math.random() * 1000000),
-                  method: 'Network.getResponseBody',
-                  params: { requestId },
-                })
-              );
-            }
-          }
+          // Clean up pending request
+          pendingRequests.delete(requestId);
         }
       }
 
