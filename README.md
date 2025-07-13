@@ -1,6 +1,6 @@
 # playwright-min-network-mcp
 
-A minimal network monitoring MCP tool for Playwright browser automation. **Just 4 simple tools** to capture, filter, and analyze network traffic during web automation with MCP context efficiency.
+A minimal network monitoring MCP tool for Playwright browser automation. Just 5 simple tools to capture, filter, and analyze network traffic during web automation with MCP context efficiency.
 
 ```mermaid
 graph LR
@@ -52,13 +52,11 @@ flowchart TD
 
 ## Features
 
-- **🎯 Minimal Design**: Only 4 tools (`start_or_update_capture`, `stop_monitor`, `get_recent_requests`, `get_request_detail`) - no complexity
 - **📡 Network Capture**: Real-time request/response monitoring via Chrome DevTools Protocol
-- **🔍 Smart Filtering**: URL include patterns, content-type, and HTTP method filtering for targeted monitoring
-- **⚡ MCP Context Efficiency**: 512B body previews + 50KB detail limits prevent context overflow
-- **🛡️ Safe Scaling**: Handles large responses (67KB+) without MCP token limit violations
-- **🔄 Dynamic Updates**: Re-run start_or_update_capture to update filters
-- **🤝 Playwright Integration**: Works seamlessly with Playwright MCP during automation
+- **🔍 Smart Filtering**: Content-type, URL patterns, and HTTP method filtering
+- **⚡ MCP Context Safe**: 512B previews + 50KB detail limits prevent token overflow
+- **🔄 Dynamic Updates**: Change filters without browser restart
+- **🤝 Playwright Integration**: Works seamlessly with Playwright MCP
 
 ## Prerequisites
 
@@ -76,19 +74,9 @@ npx playwright install chromium
 npm install playwright-min-network-mcp
 ```
 
-## Why This Tool?
-
-**🎯 Minimal by Design**: Just 4 tools to capture and analyze network traffic during Playwright automation:
-- **Simple**: `start_or_update_capture` → `get_recent_requests` → `get_request_detail` → `stop_monitor`
-- **Context Safe**: 512B body previews + 50KB detail limits prevent MCP token overflow
-- **Smart Filtering**: URL include patterns (`["api/", "/graphql"]`) for targeted monitoring
-- **Dynamic**: Re-run `start_or_update_capture` with new settings to update filters
-- **Zero config**: Works immediately with smart defaults
-- **AI-friendly**: Perfect for MCP workflows and automation analysis
-
 ## Quick Start
 
-### 1. Basic MCP Configuration
+### Basic MCP Configuration
 
 Add to your `.mcp.json`:
 
@@ -103,9 +91,7 @@ Add to your `.mcp.json`:
 }
 ```
 
-### 2. Combined with Playwright MCP
-
-For comprehensive browser automation + network monitoring:
+### Combined with Playwright MCP
 
 ```json
 {
@@ -129,7 +115,7 @@ For comprehensive browser automation + network monitoring:
 ```json
 // 1. Start monitoring (launches visible Chrome browser)
 {
-  "tool": "start_or_update_capture"
+  "tool": "start_monitor"
 }
 
 // 2. Use Playwright MCP to interact with web pages
@@ -158,140 +144,35 @@ For comprehensive browser automation + network monitoring:
 }
 ```
 
-### Content-Type Filtering
-
-Control which types of network requests to capture:
+### Filtering Examples
 
 ```json
-// Default: API and form data only
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": [
-        "application/json",
-        "application/x-www-form-urlencoded", 
-        "multipart/form-data",
-        "text/plain"
-      ]
-    }
-  }
-}
-
 // Include everything (CSS, JS, images, etc.)
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": "all"
-    }
-  }
-}
+{"tool": "start_monitor", "arguments": {"filter": {"content_types": "all"}}}
 
-// Include nothing (disable monitoring)
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": []
-    }
-  }
-}
+// Custom content types  
+{"tool": "start_monitor", "arguments": {"filter": {"content_types": ["application/json", "text/css"]}}}
 
-// Custom content types
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": ["application/json", "application/xml"]
-    }
-  }
-}
-```
-
-### URL Include Patterns and Method Filtering
-
-```json
-// URL include patterns and HTTP method filtering at capture time
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": ["application/json"],
-      "url_include_patterns": ["api/", "/graphql", "/v1/"],
-      "methods": ["POST", "PUT", "DELETE"]
-    }
-  }
-}
-
-// Update filters by re-running with new settings
-{
-  "tool": "start_or_update_capture",
-  "arguments": {
-    "filter": {
-      "content_types": ["application/json", "text/html"],
-      "url_include_patterns": ["https://api.github.com/", "https://zenn.dev/api/"],
-      "methods": ["GET", "POST"]
-    }
-  }
-}
+// Update filters without restarting browser
+{"tool": "update_filter", "arguments": {"filter": {"content_types": ["application/json"], "url_include_patterns": ["api/"], "methods": ["POST"]}}}
 ```
 
 ## API Reference
 
-### start_or_update_capture
+### Tools
 
-Start network capture or update filter settings with auto-launched browser.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `max_buffer_size` | number | 20 | Maximum number of requests to store in memory |
-| `cdp_port` | number | 9222 | Chrome DevTools Protocol port number |
-| `filter.content_types` | string[] \| "all" | `["application/json", ...]` | Content types to capture |
-| `filter.url_include_patterns` | string[] \| "all" | `"all"` | URL patterns to include (e.g., `["api/", "/graphql"]`) |
-| `filter.methods` | string[] | undefined | HTTP methods to include (e.g., `["GET", "POST"]`) |
-
-### stop_monitor
-
-Stop network monitoring and close CDP connections.
-
-No parameters required.
-
-### get_recent_requests
-
-Retrieve captured network requests compact overview. **Always includes 512B body previews** for efficient request identification.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `count` | number | 10 | Number of requests to return |
-| `include_headers` | boolean | false | Include request/response headers in output |
-
-### get_request_detail
-
-Get full details for a specific request by UUID. **Body limited to 50KB** to prevent MCP context overflow.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `uuid` | string | Yes | UUID v4 of the request to retrieve details for |
-| `include_headers` | boolean | No (default: false) | Include request/response headers (excluded by default for context efficiency) |
+- **start_monitor**: Launch browser and start monitoring
+- **update_filter**: Change filters without browser restart  
+- **stop_monitor**: Stop monitoring
+- **get_recent_requests**: Get compact overview with 512B previews
+- **get_request_detail**: Get full details by UUID (50KB limit)
 
 
-## Default Filtering Behavior
+## Default Filtering
 
-**Smart Default Content Types:**
-- `application/json` - API responses and AJAX calls
-- `application/x-www-form-urlencoded` - HTML form submissions  
-- `multipart/form-data` - File uploads and form data
-- `text/plain` - Simple text data and analytics
-
-**What gets captured by default:**
-- ✅ GitHub API calls (`api.github.com`)
-- ✅ GraphQL endpoints
-- ✅ AWS S3 uploads (`*.amazonaws.com`)
-- ✅ Form submissions and file uploads
-- ✅ AJAX/XHR communications
-- ❌ CSS, JavaScript, images (unless `content_types: "all"`)
-- ❌ Analytics tracking (unless explicitly included)
+Captures API and form data by default:
+- `application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`
+- Excludes CSS, JS, images (use `content_types: "all"` to include)
 
 ## Output Format
 
@@ -339,19 +220,11 @@ Get full details for a specific request by UUID. **Body limited to 50KB** to pre
 }
 ```
 
-**Note**: Headers excluded by default for context efficiency. Large bodies (>50KB) are truncated with size indication.
-
-
-## Browser Integration
-
-- **Auto-Launch**: Launches Chrome automatically when monitoring starts
-- **Playwright Compatible**: Shares browser instance with Playwright MCP (CDP port 9222)
 
 ## Requirements
 
-- **Node.js**: ≥18.0.0
-- **Playwright**: Required for browser automation
-- **Chrome/Chromium**: Installed via `npx playwright install chromium`
+- Node.js ≥18.0.0
+- Playwright (`npm install playwright && npx playwright install chromium`)
 
 ## Development
 

@@ -141,7 +141,7 @@ export interface BrowserConfig {
  * Monitor status response
  */
 export interface MonitorStatus {
-  status: 'started' | 'stopped';
+  status: 'started' | 'stopped' | 'updated';
   buffer_size: number;
   filter: FilterConfig;
   cdp_endpoint: string | null;
