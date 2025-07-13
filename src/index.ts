@@ -4,7 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
-import { ensureBrowserVisible } from './browser.js';
+import { launchBrowserServer } from './browser.js';
 import {
   connectToCdp,
   startNetworkMonitoring,
@@ -28,6 +28,7 @@ export class NetworkMonitorMCP {
   private cdpPort = 9222;
   private networkBuffer: NetworkRequest[] = [];
   private cdpWebSocket: WebSocket | null = null;
+  private browserServer: any = null;
 
   constructor() {
     this.server = new Server(
@@ -59,7 +60,7 @@ export class NetworkMonitorMCP {
                 max_buffer_size: {
                   type: 'number',
                   description: 'Maximum buffer size for storing requests',
-                  default: 200,
+                  default: 20,
                 },
                 cdp_port: {
                   type: 'number',
@@ -213,10 +214,24 @@ export class NetworkMonitorMCP {
       const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
       this.cdpPort = options.cdp_port;
 
-      // Ensure browser is visible and get WebSocket URL
-      this.cdpWebSocketUrl = await ensureBrowserVisible(chromium, this.cdpPort);
+      // Close existing browser server if any
+      if (this.browserServer) {
+        await this.browserServer.close();
+        this.browserServer = null;
+      }
+
+      // Launch fresh browser server
+      this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
+
+      // Get CDP WebSocket URL from the debugging port
+      const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
+      const pages = await listResponse.json();
+      this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
 
       // Connect to CDP and start monitoring
+      if (!this.cdpWebSocketUrl) {
+        throw new Error('Failed to get WebSocket URL from browser server');
+      }
       this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
 
       await startNetworkMonitoring(
@@ -239,7 +254,6 @@ export class NetworkMonitorMCP {
         },
         cdp_endpoint: this.cdpWebSocketUrl,
         cdp_port: this.cdpPort,
-        browser_already_running: false, // Always false with new implementation
       };
 
       return {
@@ -259,7 +273,12 @@ export class NetworkMonitorMCP {
     if (this.cdpWebSocket) {
       this.cdpWebSocket.close();
       this.cdpWebSocket = null;
-      console.error('CDP WebSocket connection closed');
+    }
+
+    // Close browser server properly
+    if (this.browserServer) {
+      await this.browserServer.close();
+      this.browserServer = null;
     }
 
     this.isMonitoring = false;
@@ -312,24 +331,6 @@ export class NetworkMonitorMCP {
         showing: requestsToReturn.length,
         requests: requestsToReturn,
       };
-
-      // Log filtering suggestions if result size is large
-      const resultSize = JSON.stringify(response).length;
-      if (resultSize > 20000) {
-        // ~20KB threshold
-        console.warn(
-          `💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`
-        );
-        console.warn(
-          `   • URL filtering: { "filter": { "url_pattern": "collector|_private|analytics|avatar" } }`
-        );
-        console.warn(`   • Method filtering: { "filter": { "methods": ["POST", "PUT"] } }`);
-        console.warn(
-          `   • Content type filtering: { "filter": { "content_type": ["application/json"] } }`
-        );
-        console.warn(`   • Reduce count: { "count": 5 }`);
-        console.warn(`   • Exclude bodies: { "include_body": false }`);
-      }
 
       return {
         content: [

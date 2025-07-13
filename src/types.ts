@@ -145,7 +145,6 @@ export interface MonitorStatus {
   filter: FilterConfig;
   cdp_endpoint: string | null;
   cdp_port: number;
-  browser_already_running: boolean;
   total_captured?: number;
 }
 
