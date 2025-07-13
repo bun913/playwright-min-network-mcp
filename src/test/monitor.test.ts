@@ -205,8 +205,11 @@ describe('Network Monitor', () => {
   });
 
   describe('shouldIncludeRequestByUrlAndMethod', () => {
-    it('should include requests when no filters are specified', () => {
-      const filter = { contentTypes: ['application/json'] };
+    it('should include all requests when url_include_patterns is "all"', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        urlIncludePatterns: 'all',
+      };
 
       expect(
         shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
@@ -216,29 +219,30 @@ describe('Network Monitor', () => {
       ).toBe(true);
     });
 
-    it('should exclude requests matching URL exclude patterns', () => {
+    it('should include only requests matching URL include patterns', () => {
       const filter = {
         contentTypes: ['application/json'],
-        urlExcludePatterns: ['\\.js$', '\\.css$', '\\.png$'],
+        urlIncludePatterns: ['api/', '/graphql'],
       };
 
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://example.com/api/users', 'GET', filter)
+      ).toBe(true);
+      expect(shouldIncludeRequestByUrlAndMethod('https://example.com/graphql', 'GET', filter)).toBe(
+        true
+      );
       expect(
         shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'GET', filter)
       ).toBe(false);
       expect(
         shouldIncludeRequestByUrlAndMethod('https://static.example.com/style.css', 'GET', filter)
       ).toBe(false);
-      expect(
-        shouldIncludeRequestByUrlAndMethod('https://static.example.com/logo.png', 'GET', filter)
-      ).toBe(false);
-      expect(
-        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
-      ).toBe(true);
     });
 
     it('should include only specified HTTP methods when methods filter is set', () => {
       const filter = {
         contentTypes: ['application/json'],
+        urlIncludePatterns: 'all',
         methods: ['GET', 'POST'],
       };
 
@@ -259,16 +263,16 @@ describe('Network Monitor', () => {
     it('should apply both URL and method filters together', () => {
       const filter = {
         contentTypes: ['application/json'],
-        urlExcludePatterns: ['\\.js$', '\\.css$'],
+        urlIncludePatterns: ['api/'],
         methods: ['GET', 'POST'],
       };
 
       // Should pass both filters
       expect(
-        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+        shouldIncludeRequestByUrlAndMethod('https://example.com/api/users', 'GET', filter)
       ).toBe(true);
       expect(
-        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+        shouldIncludeRequestByUrlAndMethod('https://example.com/api/users', 'POST', filter)
       ).toBe(true);
 
       // Should fail URL filter
@@ -278,7 +282,7 @@ describe('Network Monitor', () => {
 
       // Should fail method filter
       expect(
-        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+        shouldIncludeRequestByUrlAndMethod('https://example.com/api/users', 'PUT', filter)
       ).toBe(false);
 
       // Should fail both filters
@@ -290,18 +294,19 @@ describe('Network Monitor', () => {
     it('should handle invalid regex patterns gracefully', () => {
       const filter = {
         contentTypes: ['application/json'],
-        urlExcludePatterns: ['[invalid'],
+        urlIncludePatterns: ['[invalid'],
       };
 
-      // Should include request when regex pattern is invalid (logs error)
+      // Should exclude request when regex pattern is invalid (logs error)
       expect(
         shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it('should handle empty methods array (include all methods)', () => {
       const filter = {
         contentTypes: ['application/json'],
+        urlIncludePatterns: 'all',
         methods: [],
       };
 

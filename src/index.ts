@@ -92,11 +92,24 @@ export class NetworkMonitorMCP {
                       description:
                         'Content types to capture. Default: API and form data only. Use "all" for everything including static files, or [] to capture nothing.',
                     },
-                    url_exclude_patterns: {
-                      type: 'array',
-                      items: { type: 'string' },
+                    url_include_patterns: {
+                      oneOf: [
+                        {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description:
+                            'Array of URL patterns to include. Example: ["api/", "/graphql"] to capture only API endpoints.',
+                        },
+                        {
+                          type: 'string',
+                          enum: ['all'],
+                          description:
+                            'Special value "all" to include all URLs (no URL filtering).',
+                        },
+                      ],
+                      default: 'all',
                       description:
-                        'Array of URL patterns to exclude. Example: ["\\.js$", "\\.css$", "\\.png$"] to exclude static assets.',
+                        'URL patterns to include. Default: "all" for no filtering. Use array of patterns to filter specific URLs.',
                     },
                     methods: {
                       type: 'array',
@@ -211,7 +224,7 @@ export class NetworkMonitorMCP {
         this.networkBuffer,
         {
           contentTypes: options.filter.content_types,
-          urlExcludePatterns: options.filter.url_exclude_patterns,
+          urlIncludePatterns: options.filter.url_include_patterns,
           methods: options.filter.methods,
         },
         options.max_buffer_size
@@ -223,6 +236,7 @@ export class NetworkMonitorMCP {
         buffer_size: options.max_buffer_size,
         filter: {
           contentTypes: options.filter.content_types,
+          urlIncludePatterns: options.filter.url_include_patterns,
         },
         cdp_endpoint: this.cdpWebSocketUrl,
         cdp_port: this.cdpPort,

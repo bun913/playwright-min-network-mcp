@@ -17,7 +17,10 @@ export const StartMonitorSchema = z.object({
           'multipart/form-data',
           'text/plain',
         ]),
-      url_exclude_patterns: z.array(z.string()).optional(),
+      url_include_patterns: z
+        .union([z.array(z.string()), z.literal('all')])
+        .optional()
+        .default('all'),
       methods: z.array(z.string()).optional(),
       max_body_size: z.number().optional(),
     })
@@ -29,6 +32,7 @@ export const StartMonitorSchema = z.object({
         'multipart/form-data',
         'text/plain',
       ],
+      url_include_patterns: 'all',
     }),
 });
 
@@ -112,7 +116,7 @@ export interface CdpResponseReceived {
  */
 export interface FilterConfig {
   contentTypes: string[] | 'all';
-  urlExcludePatterns?: string[];
+  urlIncludePatterns: string[] | 'all';
   methods?: string[];
 }
 
