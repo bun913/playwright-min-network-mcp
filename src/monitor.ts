@@ -20,11 +20,13 @@ export function validateAndWarnFilter(filter: FilterConfig): void {
     warnings.push('   Consider using specific content types: ["application/json", "text/html"]');
   }
 
-  // Check if no URL filtering
-  if (!filter.urlExcludePatterns || filter.urlExcludePatterns.length === 0) {
-    warnings.push('⚠️  No URL filtering - this may capture many unnecessary requests');
+  // Check if URL filtering is too permissive
+  if (filter.urlIncludePatterns === 'all') {
     warnings.push(
-      '   Consider excluding static files: ["\\.js$", "\\.css$", "\\.png$", "\\.jpg$"]'
+      '⚠️  URL include patterns is set to "all" - this may capture many unnecessary requests'
+    );
+    warnings.push(
+      '   Consider filtering specific patterns: ["api/", "/graphql", "/v1/"] to capture only API endpoints'
     );
   }
 
@@ -82,16 +84,23 @@ export function shouldIncludeRequestByUrlAndMethod(
   method: string,
   filter: FilterConfig
 ): boolean {
-  // Check URL exclude patterns
-  if (filter.urlExcludePatterns) {
-    for (const pattern of filter.urlExcludePatterns) {
-      try {
-        const regex = new RegExp(pattern);
-        if (regex.test(url)) {
-          return false;
+  // Check URL include patterns
+  if (filter.urlIncludePatterns !== 'all') {
+    if (Array.isArray(filter.urlIncludePatterns)) {
+      let matched = false;
+      for (const pattern of filter.urlIncludePatterns) {
+        try {
+          const regex = new RegExp(pattern);
+          if (regex.test(url)) {
+            matched = true;
+            break;
+          }
+        } catch (error) {
+          console.error(`Invalid URL include pattern: ${pattern}`, error);
         }
-      } catch (error) {
-        console.error(`Invalid URL exclude pattern: ${pattern}`, error);
+      }
+      if (!matched) {
+        return false;
       }
     }
   }
