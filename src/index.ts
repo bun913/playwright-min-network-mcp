@@ -153,7 +153,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_request_detail',
             description:
-              'Get full details for a specific request by UUID. Returns complete request/response data with optional headers.',
+              'Get full details for a specific request by UUID. Returns complete request/response data with 50KB body limit and optional headers to prevent MCP context overflow.',
             inputSchema: {
               type: 'object',
               properties: {
