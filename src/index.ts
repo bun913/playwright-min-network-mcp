@@ -88,6 +88,18 @@ export class NetworkMonitorMCP {
                       description:
                         'Content types to capture. Default: API and form data only. Use "all" for everything including static files, or [] to capture nothing.',
                     },
+                    url_exclude_patterns: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Array of URL patterns to exclude. Example: ["\\.js$", "\\.css$", "\\.png$"] to exclude static assets.',
+                    },
+                    methods: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Array of HTTP methods to include. Example: ["GET", "POST"] to only capture GET and POST requests.',
+                    },
                   },
                 },
               },
@@ -212,6 +224,8 @@ export class NetworkMonitorMCP {
             this.networkBuffer,
             {
               contentTypes: options.filter.content_types,
+              urlExcludePatterns: options.filter.url_exclude_patterns,
+              methods: options.filter.methods,
             },
             options.max_buffer_size
           );

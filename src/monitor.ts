@@ -32,6 +32,41 @@ export async function connectToCdp(cdpUrl: string): Promise<WebSocket> {
 }
 
 /**
+ * Check if a request should be included based on early filtering (URL and method)
+ * @param url Request URL
+ * @param method Request method
+ * @param filter Filter configuration
+ */
+export function shouldIncludeRequestEarly(
+  url: string,
+  method: string,
+  filter: FilterConfig
+): boolean {
+  // Check URL exclude patterns
+  if (filter.urlExcludePatterns) {
+    for (const pattern of filter.urlExcludePatterns) {
+      try {
+        const regex = new RegExp(pattern);
+        if (regex.test(url)) {
+          return false;
+        }
+      } catch (error) {
+        console.error(`Invalid URL exclude pattern: ${pattern}`, error);
+      }
+    }
+  }
+
+  // Check allowed methods
+  if (filter.methods && filter.methods.length > 0) {
+    if (!filter.methods.includes(method)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Check if a request should be included based on content type filtering
  * @param contentType Response content type
  * @param filter Filter configuration
@@ -98,6 +133,11 @@ export async function startNetworkMonitoring(
       if (message.method === 'Network.requestWillBeSent') {
         const { requestId, request, timestamp } = message.params;
 
+        // Apply early filtering (URL and method) before storing
+        if (!shouldIncludeRequestEarly(request.url, request.method, filter)) {
+          return; // Skip this request entirely
+        }
+
         // Create network request object
         const networkRequest: NetworkRequest = {
           id: requestId,
@@ -109,7 +149,7 @@ export async function startNetworkMonitoring(
           body: request.postData,
         };
 
-        // Store temporarily to apply filtering after response is received
+        // Store temporarily to apply content-type filtering after response is received
         buffer.push(networkRequest);
 
         // Maintain buffer size limit
