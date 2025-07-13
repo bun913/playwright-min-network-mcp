@@ -34,12 +34,12 @@ export const StartMonitorSchema = z.object({
 
 export const GetRecentRequestsSchema = z.object({
   count: z.number().optional().default(10),
-  include_body: z.boolean().optional().default(false),
   include_headers: z.boolean().optional().default(false),
 });
 
 export const GetRequestDetailSchema = z.object({
   uuid: z.string().uuid('Must be a valid UUID v4'),
+  include_headers: z.boolean().optional().default(false),
 });
 
 /**
@@ -146,10 +146,25 @@ export interface MonitorStatus {
 }
 
 /**
+ * Compact network request for overview display (512B body preview)
+ */
+export interface CompactNetworkRequest {
+  uuid: string;
+  method: string;
+  status?: number;
+  url: string;
+  mimeType?: string;
+  bodyPreview?: string; // First 512 bytes of body
+  bodySize?: number; // Full body size in bytes
+  timestamp: number;
+  responseTimestamp?: number;
+}
+
+/**
  * Network requests response
  */
 export interface NetworkRequestsResponse {
   total_captured: number;
   showing: number;
-  requests: NetworkRequest[];
+  requests: CompactNetworkRequest[];
 }

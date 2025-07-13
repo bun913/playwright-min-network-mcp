@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { launchBrowserServer } from './browser.js';
 import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
+  type CompactNetworkRequest,
   GetRecentRequestsSchema,
   type GetRequestDetailOptions,
   GetRequestDetailSchema,
@@ -119,7 +120,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_recent_requests',
             description:
-              'Get recent network requests overview. For MCP context efficiency, use include_body=false (default) and get_request_detail for specific requests.',
+              'Get recent network requests compact overview with 512B body previews. Always includes body previews for efficient request identification.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -127,12 +128,6 @@ export class NetworkMonitorMCP {
                   type: 'number',
                   description: 'Number of requests to return',
                   default: 10,
-                },
-                include_body: {
-                  type: 'boolean',
-                  description:
-                    'Include request/response bodies (WARNING: may consume large MCP context)',
-                  default: false,
                 },
                 include_headers: {
                   type: 'boolean',
@@ -145,7 +140,7 @@ export class NetworkMonitorMCP {
           {
             name: 'get_request_detail',
             description:
-              'Get full details for a specific request by UUID. Recommended for viewing request/response bodies efficiently.',
+              'Get full details for a specific request by UUID. Returns complete request/response data with optional headers.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -153,6 +148,12 @@ export class NetworkMonitorMCP {
                   type: 'string',
                   description: 'UUID of the request to retrieve details for',
                   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+                },
+                include_headers: {
+                  type: 'boolean',
+                  description:
+                    'Include request/response headers (default: false for context efficiency)',
+                  default: false,
                 },
               },
               required: ['uuid'],
@@ -273,34 +274,41 @@ export class NetworkMonitorMCP {
       const sortedRequests = [...this.networkBuffer].sort((a, b) => b.timestamp - a.timestamp);
       const limitedRequests = sortedRequests.slice(0, options.count);
 
-      // Remove request/response bodies and headers if not requested
-      const requestsToReturn = limitedRequests.map((req) => {
-        const requestCopy = { ...req };
+      // Convert to compact format with 512B body previews
+      const compactRequests: CompactNetworkRequest[] = limitedRequests.map((req) => {
+        const compact: CompactNetworkRequest = {
+          uuid: req.uuid,
+          method: req.method,
+          url: req.url,
+          timestamp: req.timestamp,
+        };
 
-        if (!options.include_body) {
-          delete requestCopy.body;
-          if (requestCopy.response) {
-            requestCopy.response = {
-              ...requestCopy.response,
-            };
-            delete requestCopy.response.body;
+        // Add response data if available
+        if (req.response) {
+          compact.status = req.response.status;
+          compact.mimeType = req.response.mimeType;
+          compact.responseTimestamp = req.responseTimestamp;
+
+          // Add 512B body preview if body exists
+          if (req.response.body) {
+            compact.bodyPreview = req.response.body.substring(0, 512);
+            compact.bodySize = req.response.body.length;
           }
         }
 
-        if (!options.include_headers) {
-          (requestCopy as any).headers = undefined;
-          if (requestCopy.response) {
-            (requestCopy.response as any).headers = undefined;
-          }
+        // Add request body preview if exists
+        if (req.body && !compact.bodyPreview) {
+          compact.bodyPreview = req.body.substring(0, 512);
+          compact.bodySize = req.body.length;
         }
 
-        return requestCopy;
+        return compact;
       });
 
       const response = {
         total_captured: this.networkBuffer.length,
-        showing: requestsToReturn.length,
-        requests: requestsToReturn,
+        showing: compactRequests.length,
+        requests: compactRequests,
       };
 
       return {
@@ -342,12 +350,22 @@ export class NetworkMonitorMCP {
         };
       }
 
-      // Return full request details
+      // Return request details (headers optional)
+      const requestCopy: any = { ...request };
+
+      if (!options.include_headers) {
+        requestCopy.headers = undefined;
+        if (requestCopy.response) {
+          requestCopy.response = { ...requestCopy.response };
+          requestCopy.response.headers = undefined;
+        }
+      }
+
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(request, null, 2),
+            text: JSON.stringify(requestCopy, null, 2),
           },
         ],
       };

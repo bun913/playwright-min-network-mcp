@@ -160,7 +160,7 @@ describe('NetworkMonitorMCP', () => {
       expect(response.requests[0].response?.headers).toBeUndefined();
     });
 
-    it('should include headers when include_headers is true', async () => {
+    it('should return compact format with body preview and metadata', async () => {
       const mockRequests: NetworkRequest[] = [
         {
           id: '1',
@@ -170,27 +170,114 @@ describe('NetworkMonitorMCP', () => {
           headers: { 'Content-Type': 'application/json' },
           timestamp: 1000,
           type: 'request',
+          body: 'request body data',
           response: {
             status: 200,
             headers: { Server: 'nginx' },
             mimeType: 'application/json',
+            body: 'response body data',
           },
+          responseTimestamp: 1001,
         },
       ];
 
       networkMonitor.setNetworkBuffer(mockRequests);
-      const result = await networkMonitor.testGetRecentRequests({
-        include_headers: true,
-      });
+      const result = await networkMonitor.testGetRecentRequests({});
       const response = JSON.parse(result.content[0].text);
 
-      expect(response.requests[0].headers).toEqual({ 'Content-Type': 'application/json' });
-      expect(response.requests[0].response?.headers).toEqual({ Server: 'nginx' });
+      expect(response.requests[0]).toEqual({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        method: 'POST',
+        url: 'https://api.example.com/data',
+        timestamp: 1000,
+        status: 200,
+        mimeType: 'application/json',
+        bodyPreview: 'response body data',
+        bodySize: 18,
+        responseTimestamp: 1001,
+      });
+    });
+
+    it('should truncate body preview to 512 bytes for large responses', async () => {
+      // Create 1KB (1024 bytes) test string
+      const largeBody = 'A'.repeat(1024);
+      const expected512B = 'A'.repeat(512);
+
+      const mockRequests: NetworkRequest[] = [
+        {
+          id: '1',
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+          url: 'https://api.example.com/large-data',
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          timestamp: 1000,
+          type: 'request',
+          response: {
+            status: 200,
+            headers: { Server: 'nginx' },
+            mimeType: 'application/json',
+            body: largeBody,
+          },
+          responseTimestamp: 1001,
+        },
+      ];
+
+      networkMonitor.setNetworkBuffer(mockRequests);
+      const result = await networkMonitor.testGetRecentRequests({});
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.requests[0].bodyPreview).toEqual(expected512B);
+      expect(response.requests[0].bodySize).toEqual(1024);
+      expect(response.requests[0].bodyPreview.length).toEqual(512);
     });
   });
 
   describe('getRequestDetail', () => {
-    it('should return full request details for valid UUID', async () => {
+    it('should return full request details without headers by default', async () => {
+      const mockRequest: NetworkRequest = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/data',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        timestamp: 1000,
+        type: 'request',
+        body: 'request body',
+        response: {
+          status: 200,
+          headers: { Server: 'nginx' },
+          mimeType: 'application/json',
+          body: 'response body',
+        },
+      };
+
+      const expectedResponse = {
+        id: '1',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://api.example.com/data',
+        method: 'POST',
+        headers: undefined,
+        timestamp: 1000,
+        type: 'request',
+        body: 'request body',
+        response: {
+          status: 200,
+          headers: undefined,
+          mimeType: 'application/json',
+          body: 'response body',
+        },
+      };
+
+      networkMonitor.setNetworkBuffer([mockRequest]);
+      const result = await networkMonitor.testGetRequestDetail({
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+      });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response).toEqual(expectedResponse);
+    });
+
+    it('should include headers when include_headers is true', async () => {
       const mockRequest: NetworkRequest = {
         id: '1',
         uuid: '123e4567-e89b-12d3-a456-426614174000',
@@ -211,6 +298,7 @@ describe('NetworkMonitorMCP', () => {
       networkMonitor.setNetworkBuffer([mockRequest]);
       const result = await networkMonitor.testGetRequestDetail({
         uuid: '123e4567-e89b-12d3-a456-426614174000',
+        include_headers: true,
       });
       const response = JSON.parse(result.content[0].text);
 
