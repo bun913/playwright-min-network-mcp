@@ -97,106 +97,6 @@ describe('NetworkMonitorMCP', () => {
       expect(response.requests).toHaveLength(2);
     });
 
-    it('should filter by HTTP methods', async () => {
-      const mockRequests: NetworkRequest[] = [
-        {
-          id: '1',
-          url: 'https://api.example.com/get',
-          method: 'GET',
-          headers: {},
-          timestamp: 1000,
-          type: 'request',
-        },
-        {
-          id: '2',
-          url: 'https://api.example.com/post',
-          method: 'POST',
-          headers: {},
-          timestamp: 2000,
-          type: 'request',
-        },
-      ];
-
-      networkMonitor.setNetworkBuffer(mockRequests);
-      const result = await networkMonitor.testGetRecentRequests({
-        filter: { methods: ['POST'] },
-      });
-      const response = JSON.parse(result.content[0].text);
-
-      expect(response.showing).toBe(1);
-      expect(response.requests[0].method).toBe('POST');
-    });
-
-    it('should filter by URL pattern', async () => {
-      const mockRequests: NetworkRequest[] = [
-        {
-          id: '1',
-          url: 'https://api.example.com/users',
-          method: 'GET',
-          headers: {},
-          timestamp: 1000,
-          type: 'request',
-        },
-        {
-          id: '2',
-          url: 'https://static.example.com/image.png',
-          method: 'GET',
-          headers: {},
-          timestamp: 2000,
-          type: 'request',
-        },
-      ];
-
-      networkMonitor.setNetworkBuffer(mockRequests);
-      const result = await networkMonitor.testGetRecentRequests({
-        filter: { url_pattern: 'api\\.example\\.com' },
-      });
-      const response = JSON.parse(result.content[0].text);
-
-      expect(response.showing).toBe(1);
-      expect(response.requests[0].url).toBe('https://api.example.com/users');
-    });
-
-    it('should filter by content type', async () => {
-      const mockRequests: NetworkRequest[] = [
-        {
-          id: '1',
-          url: 'https://api.example.com/data',
-          method: 'GET',
-          headers: {},
-          timestamp: 1000,
-          type: 'request',
-          response: {
-            status: 200,
-            headers: {},
-            mimeType: 'application/json',
-          },
-        },
-        {
-          id: '2',
-          url: 'https://api.example.com/html',
-          method: 'GET',
-          headers: {},
-          timestamp: 2000,
-          type: 'request',
-          response: {
-            status: 200,
-            headers: {},
-            mimeType: 'text/html',
-          },
-        },
-      ];
-
-      networkMonitor.setNetworkBuffer(mockRequests);
-      const result = await networkMonitor.testGetRecentRequests({
-        filter: { content_type: ['application/json'] },
-      });
-      const response = JSON.parse(result.content[0].text);
-
-      expect(response.showing).toBe(1);
-      expect(response.requests[0].response?.mimeType).toBe('application/json');
-    });
-
     it('should exclude bodies when include_body is false', async () => {
       const mockRequests: NetworkRequest[] = [
         {
@@ -276,27 +176,6 @@ describe('NetworkMonitorMCP', () => {
 
       expect(response.requests[0].headers).toEqual({ 'Content-Type': 'application/json' });
       expect(response.requests[0].response?.headers).toEqual({ Server: 'nginx' });
-    });
-
-    it('should handle invalid URL pattern gracefully', async () => {
-      const mockRequests: NetworkRequest[] = [
-        {
-          id: '1',
-          url: 'https://api.example.com/test',
-          method: 'GET',
-          headers: {},
-          timestamp: 1000,
-          type: 'request',
-        },
-      ];
-
-      networkMonitor.setNetworkBuffer(mockRequests);
-      const result = await networkMonitor.testGetRecentRequests({
-        filter: { url_pattern: '[invalid' },
-      });
-      const response = JSON.parse(result.content[0].text);
-
-      expect(response.showing).toBe(0); // Should filter out all requests due to invalid pattern
     });
   });
 });

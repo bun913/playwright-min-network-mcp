@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Network monitoring configuration schema
  */
 export const StartMonitorSchema = z.object({
-  max_buffer_size: z.number().optional().default(200),
+  max_buffer_size: z.number().max(50).optional().default(20),
   cdp_port: z.number().optional().default(9222),
   filter: z
     .object({
@@ -17,6 +17,9 @@ export const StartMonitorSchema = z.object({
           'multipart/form-data',
           'text/plain',
         ]),
+      url_exclude_patterns: z.array(z.string()).optional(),
+      methods: z.array(z.string()).optional(),
+      max_body_size: z.number().optional(),
     })
     .optional()
     .default({
@@ -31,13 +34,6 @@ export const StartMonitorSchema = z.object({
 
 export const GetRecentRequestsSchema = z.object({
   count: z.number().optional().default(10),
-  filter: z
-    .object({
-      methods: z.array(z.string()).optional(),
-      url_pattern: z.string().optional(),
-      content_type: z.array(z.string()).optional(),
-    })
-    .optional(),
   include_body: z.boolean().optional().default(true),
   include_headers: z.boolean().optional().default(false),
 });
@@ -110,6 +106,8 @@ export interface CdpResponseReceived {
  */
 export interface FilterConfig {
   contentTypes: string[] | 'all';
+  urlExcludePatterns?: string[];
+  methods?: string[];
 }
 
 /**
@@ -138,7 +136,6 @@ export interface MonitorStatus {
   filter: FilterConfig;
   cdp_endpoint: string | null;
   cdp_port: number;
-  browser_already_running: boolean;
   total_captured?: number;
 }
 

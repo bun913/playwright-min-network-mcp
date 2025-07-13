@@ -5,6 +5,45 @@
 import type { FilterConfig, NetworkRequest } from './types.js';
 
 /**
+ * Check if filter configuration is too permissive and show warnings
+ * @param filter Filter configuration to validate
+ */
+export function validateAndWarnFilter(filter: FilterConfig): void {
+  const warnings: string[] = [];
+
+  // Check if content types are too permissive
+  if (filter.contentTypes === 'all') {
+    warnings.push(
+      '⚠️  Content-type filter is set to "all" - this may capture many large static files'
+    );
+    warnings.push('   Consider using specific content types: ["application/json", "text/html"]');
+  }
+
+  // Check if no URL filtering
+  if (!filter.urlExcludePatterns || filter.urlExcludePatterns.length === 0) {
+    warnings.push('⚠️  No URL filtering - this may capture many unnecessary requests');
+    warnings.push(
+      '   Consider excluding static files: ["\\.js$", "\\.css$", "\\.png$", "\\.jpg$"]'
+    );
+  }
+
+  // Check if no method filtering
+  if (!filter.methods || filter.methods.length === 0) {
+    warnings.push('⚠️  No HTTP method filtering - capturing all request methods');
+    warnings.push('   Consider limiting to specific methods: ["GET", "POST"]');
+  }
+
+  // Show warnings if any
+  if (warnings.length > 0) {
+    console.warn('🚨 Network Monitor Filter Recommendations:');
+    for (const warning of warnings) {
+      console.warn(warning);
+    }
+    console.warn('   Re-run start_or_update_capture with new filter settings to adjust filters');
+  }
+}
+
+/**
  * Connect to Chrome DevTools Protocol WebSocket
  * @param cdpUrl WebSocket URL for CDP connection
  * @returns Promise<WebSocket> Connected WebSocket instance
@@ -29,6 +68,41 @@ export async function connectToCdp(cdpUrl: string): Promise<WebSocket> {
       }
     }, 5000);
   });
+}
+
+/**
+ * Check if a request should be included based on URL and method filtering
+ * @param url Request URL
+ * @param method Request method
+ * @param filter Filter configuration
+ */
+export function shouldIncludeRequestByUrlAndMethod(
+  url: string,
+  method: string,
+  filter: FilterConfig
+): boolean {
+  // Check URL exclude patterns
+  if (filter.urlExcludePatterns) {
+    for (const pattern of filter.urlExcludePatterns) {
+      try {
+        const regex = new RegExp(pattern);
+        if (regex.test(url)) {
+          return false;
+        }
+      } catch (error) {
+        console.error(`Invalid URL exclude pattern: ${pattern}`, error);
+      }
+    }
+  }
+
+  // Check allowed methods
+  if (filter.methods && filter.methods.length > 0) {
+    if (!filter.methods.includes(method)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -98,6 +172,11 @@ export async function startNetworkMonitoring(
       if (message.method === 'Network.requestWillBeSent') {
         const { requestId, request, timestamp } = message.params;
 
+        // Apply early filtering (URL and method) before storing
+        if (!shouldIncludeRequestByUrlAndMethod(request.url, request.method, filter)) {
+          return; // Skip this request entirely
+        }
+
         // Create network request object
         const networkRequest: NetworkRequest = {
           id: requestId,
@@ -109,7 +188,7 @@ export async function startNetworkMonitoring(
           body: request.postData,
         };
 
-        // Store temporarily to apply filtering after response is received
+        // Store temporarily to apply content-type filtering after response is received
         buffer.push(networkRequest);
 
         // Maintain buffer size limit

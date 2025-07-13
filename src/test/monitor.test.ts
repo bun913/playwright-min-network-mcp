@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { connectToCdp, shouldIncludeRequest, startNetworkMonitoring } from '../monitor.js';
+import {
+  connectToCdp,
+  shouldIncludeRequest,
+  shouldIncludeRequestByUrlAndMethod,
+  startNetworkMonitoring,
+} from '../monitor.js';
 
 describe('Network Monitor', () => {
   describe('connectToCdp', () => {
@@ -195,6 +200,122 @@ describe('Network Monitor', () => {
       expect(shouldIncludeRequest('text/json', filter)).toBe(true);
       expect(shouldIncludeRequest('application/json; charset=utf-8', filter)).toBe(true);
       expect(shouldIncludeRequest('text/plain', filter)).toBe(false);
+    });
+  });
+
+  describe('shouldIncludeRequestByUrlAndMethod', () => {
+    it('should include requests when no filters are specified', () => {
+      const filter = { contentTypes: ['application/json'] };
+
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'POST', filter)
+      ).toBe(true);
+    });
+
+    it('should exclude requests matching URL exclude patterns', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        urlExcludePatterns: ['\\.js$', '\\.css$', '\\.png$'],
+      };
+
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/style.css', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/logo.png', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+    });
+
+    it('should include only specified HTTP methods when methods filter is set', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        methods: ['GET', 'POST'],
+      };
+
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'DELETE', filter)
+      ).toBe(false);
+    });
+
+    it('should apply both URL and method filters together', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        urlExcludePatterns: ['\\.js$', '\\.css$'],
+        methods: ['GET', 'POST'],
+      };
+
+      // Should pass both filters
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
+
+      // Should fail URL filter
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'GET', filter)
+      ).toBe(false);
+
+      // Should fail method filter
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(false);
+
+      // Should fail both filters
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'PUT', filter)
+      ).toBe(false);
+    });
+
+    it('should handle invalid regex patterns gracefully', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        urlExcludePatterns: ['[invalid'],
+      };
+
+      // Should include request when regex pattern is invalid (logs error)
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+    });
+
+    it('should handle empty methods array (include all methods)', () => {
+      const filter = {
+        contentTypes: ['application/json'],
+        methods: [],
+      };
+
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'DELETE', filter)
+      ).toBe(true);
     });
   });
 });

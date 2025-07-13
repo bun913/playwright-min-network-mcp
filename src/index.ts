@@ -4,7 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
-import { checkExistingBrowser, launchBrowser } from './browser.js';
+import { launchBrowserServer } from './browser.js';
 import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
   GetRecentRequestsSchema,
@@ -21,6 +21,7 @@ export class NetworkMonitorMCP {
   private cdpPort = 9222;
   private networkBuffer: NetworkRequest[] = [];
   private cdpWebSocket: WebSocket | null = null;
+  private browserServer: any = null;
 
   constructor() {
     this.server = new Server(
@@ -43,16 +44,16 @@ export class NetworkMonitorMCP {
       return {
         tools: [
           {
-            name: 'start_monitor',
+            name: 'start_or_update_capture',
             description:
-              'Start network monitoring with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
+              'Start network capture or update filter settings with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
             inputSchema: {
               type: 'object',
               properties: {
                 max_buffer_size: {
                   type: 'number',
                   description: 'Maximum buffer size for storing requests',
-                  default: 200,
+                  default: 20,
                 },
                 cdp_port: {
                   type: 'number',
@@ -88,6 +89,18 @@ export class NetworkMonitorMCP {
                       description:
                         'Content types to capture. Default: API and form data only. Use "all" for everything including static files, or [] to capture nothing.',
                     },
+                    url_exclude_patterns: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Array of URL patterns to exclude. Example: ["\\.js$", "\\.css$", "\\.png$"] to exclude static assets.',
+                    },
+                    methods: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Array of HTTP methods to include. Example: ["GET", "POST"] to only capture GET and POST requests.',
+                    },
                   },
                 },
               },
@@ -112,26 +125,6 @@ export class NetworkMonitorMCP {
                   description: 'Number of requests to return',
                   default: 10,
                 },
-                filter: {
-                  type: 'object',
-                  description: 'Filter options',
-                  properties: {
-                    methods: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'HTTP methods to include',
-                    },
-                    url_pattern: {
-                      type: 'string',
-                      description: 'URL pattern to match',
-                    },
-                    content_type: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Content types to include',
-                    },
-                  },
-                },
                 include_body: {
                   type: 'boolean',
                   description: 'Include request/response bodies',
@@ -153,7 +146,7 @@ export class NetworkMonitorMCP {
       const { name, arguments: args } = request.params;
 
       switch (name) {
-        case 'start_monitor':
+        case 'start_or_update_capture':
           return this.startMonitor(args);
         case 'stop_monitor':
           return this.stopMonitor();
@@ -170,59 +163,37 @@ export class NetworkMonitorMCP {
       const options: StartMonitorOptions = StartMonitorSchema.parse(args || {});
       this.cdpPort = options.cdp_port;
 
-      // Check if browser is already running
-      console.error(`DEBUG: Checking for existing browser on port ${this.cdpPort}...`);
-      const browserExists = await checkExistingBrowser(this.cdpPort);
-
-      if (browserExists) {
-        console.error(`DEBUG: Browser already running on port ${this.cdpPort}, skipping launch`);
-        // Get existing page WebSocket URL
-        const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
-        const pages = await listResponse.json();
-
-        if (Array.isArray(pages) && pages.length > 0) {
-          this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
-          console.error(`DEBUG: Using existing page WebSocket: ${this.cdpWebSocketUrl}`);
-        } else {
-          console.error(
-            `DEBUG: Browser running on port ${this.cdpPort} but no active pages found. Cleaning up and launching new instance...`
-          );
-          // Clean up any existing monitoring state
-          await this.stopMonitor();
-          // Launch new browser
-          this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
-          console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
-        }
-      } else {
-        console.error('DEBUG: No existing browser found, launching new instance...');
-        // Launch new browser (always visible)
-        this.cdpWebSocketUrl = await launchBrowser(chromium, this.cdpPort);
-        console.error(`DEBUG: Browser launched with CDP endpoint: ${this.cdpWebSocketUrl}`);
+      // Close existing browser server if any
+      if (this.browserServer) {
+        await this.browserServer.close();
+        this.browserServer = null;
       }
+
+      // Launch fresh browser server
+      this.browserServer = await launchBrowserServer(chromium, this.cdpPort);
+
+      // Get CDP WebSocket URL from the debugging port
+      const listResponse = await fetch(`http://localhost:${this.cdpPort}/json/list`);
+      const pages = await listResponse.json();
+      this.cdpWebSocketUrl = pages[0].webSocketDebuggerUrl;
 
       // Connect to CDP and start monitoring
-      if (this.cdpWebSocketUrl) {
-        try {
-          console.error(`DEBUG: Connecting to CDP WebSocket: ${this.cdpWebSocketUrl}`);
-          this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
-          console.error('DEBUG: CDP WebSocket connected successfully');
-
-          await startNetworkMonitoring(
-            this.cdpWebSocket,
-            this.networkBuffer,
-            {
-              contentTypes: options.filter.content_types,
-            },
-            options.max_buffer_size
-          );
-          this.isMonitoring = true;
-          console.error('DEBUG: Network monitoring started successfully');
-        } catch (error) {
-          throw new Error(`Failed to start network monitoring: ${error}`);
-        }
-      } else {
-        throw new Error('CDP WebSocket URL not available');
+      if (!this.cdpWebSocketUrl) {
+        throw new Error('Failed to get WebSocket URL from browser server');
       }
+      this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl);
+
+      await startNetworkMonitoring(
+        this.cdpWebSocket,
+        this.networkBuffer,
+        {
+          contentTypes: options.filter.content_types,
+          urlExcludePatterns: options.filter.url_exclude_patterns,
+          methods: options.filter.methods,
+        },
+        options.max_buffer_size
+      );
+      this.isMonitoring = true;
 
       const status: MonitorStatus = {
         status: 'started',
@@ -232,7 +203,6 @@ export class NetworkMonitorMCP {
         },
         cdp_endpoint: this.cdpWebSocketUrl,
         cdp_port: this.cdpPort,
-        browser_already_running: browserExists,
       };
 
       return {
@@ -252,7 +222,12 @@ export class NetworkMonitorMCP {
     if (this.cdpWebSocket) {
       this.cdpWebSocket.close();
       this.cdpWebSocket = null;
-      console.error('CDP WebSocket connection closed');
+    }
+
+    // Close browser server properly
+    if (this.browserServer) {
+      await this.browserServer.close();
+      this.browserServer = null;
     }
 
     this.isMonitoring = false;
@@ -272,53 +247,9 @@ export class NetworkMonitorMCP {
     try {
       const options = GetRecentRequestsSchema.parse(args || {});
 
-      // Apply additional filtering if specified
-      let filteredRequests = [...this.networkBuffer];
-
-      if (options.filter) {
-        filteredRequests = filteredRequests.filter((req) => {
-          // Filter by HTTP methods
-          if (options.filter?.methods && options.filter.methods.length > 0) {
-            if (!options.filter.methods.includes(req.method)) {
-              return false;
-            }
-          }
-
-          // Filter by URL pattern
-          if (options.filter?.url_pattern) {
-            try {
-              const regex = new RegExp(options.filter.url_pattern);
-              if (!regex.test(req.url)) {
-                return false;
-              }
-            } catch (error) {
-              console.error(`Invalid URL pattern: ${options.filter.url_pattern}`, error);
-              return false;
-            }
-          }
-
-          // Filter by content type
-          if (options.filter?.content_type && options.filter.content_type.length > 0) {
-            const responseMimeType = req.response?.mimeType;
-            if (!responseMimeType) {
-              return false;
-            }
-
-            const matchesContentType = options.filter.content_type.some((ct) =>
-              responseMimeType.includes(ct)
-            );
-            if (!matchesContentType) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-      }
-
       // Sort by timestamp (newest first) and limit count
-      filteredRequests.sort((a, b) => b.timestamp - a.timestamp);
-      const limitedRequests = filteredRequests.slice(0, options.count);
+      const sortedRequests = [...this.networkBuffer].sort((a, b) => b.timestamp - a.timestamp);
+      const limitedRequests = sortedRequests.slice(0, options.count);
 
       // Remove request/response bodies and headers if not requested
       const requestsToReturn = limitedRequests.map((req) => {
@@ -349,24 +280,6 @@ export class NetworkMonitorMCP {
         showing: requestsToReturn.length,
         requests: requestsToReturn,
       };
-
-      // Log filtering suggestions if result size is large
-      const resultSize = JSON.stringify(response).length;
-      if (resultSize > 20000) {
-        // ~20KB threshold
-        console.warn(
-          `💡 Large result size (${Math.round(resultSize / 1024)}KB). Consider filtering to reduce output:`
-        );
-        console.warn(
-          `   • URL filtering: { "filter": { "url_pattern": "collector|_private|analytics|avatar" } }`
-        );
-        console.warn(`   • Method filtering: { "filter": { "methods": ["POST", "PUT"] } }`);
-        console.warn(
-          `   • Content type filtering: { "filter": { "content_type": ["application/json"] } }`
-        );
-        console.warn(`   • Reduce count: { "count": 5 }`);
-        console.warn(`   • Exclude bodies: { "include_body": false }`);
-      }
 
       return {
         content: [
