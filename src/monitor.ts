@@ -5,6 +5,75 @@
 import type { FilterConfig, NetworkRequest } from './types.js';
 
 /**
+ * Update filter configuration and re-evaluate existing buffer
+ * @param buffer Array of existing network requests
+ * @param newFilter New filter configuration
+ * @returns Number of requests removed from buffer
+ */
+export function updateFilterConfig(buffer: NetworkRequest[], newFilter: FilterConfig): number {
+  const initialLength = buffer.length;
+
+  // Apply early filtering to existing requests
+  for (let i = buffer.length - 1; i >= 0; i--) {
+    const request = buffer[i];
+
+    // Check early filtering (URL and method)
+    if (!shouldIncludeRequestEarly(request.url, request.method, newFilter)) {
+      buffer.splice(i, 1);
+      continue;
+    }
+
+    // Check content-type filtering if response exists
+    if (request.response) {
+      if (!shouldIncludeRequest(request.response.mimeType, newFilter)) {
+        buffer.splice(i, 1);
+      }
+    }
+  }
+
+  return initialLength - buffer.length;
+}
+
+/**
+ * Check if filter configuration is too permissive and show warnings
+ * @param filter Filter configuration to validate
+ */
+export function validateAndWarnFilter(filter: FilterConfig): void {
+  const warnings: string[] = [];
+
+  // Check if content types are too permissive
+  if (filter.contentTypes === 'all') {
+    warnings.push(
+      '⚠️  Content-type filter is set to "all" - this may capture many large static files'
+    );
+    warnings.push('   Consider using specific content types: ["application/json", "text/html"]');
+  }
+
+  // Check if no URL filtering
+  if (!filter.urlExcludePatterns || filter.urlExcludePatterns.length === 0) {
+    warnings.push('⚠️  No URL filtering - this may capture many unnecessary requests');
+    warnings.push(
+      '   Consider excluding static files: ["\\.js$", "\\.css$", "\\.png$", "\\.jpg$"]'
+    );
+  }
+
+  // Check if no method filtering
+  if (!filter.methods || filter.methods.length === 0) {
+    warnings.push('⚠️  No HTTP method filtering - capturing all request methods');
+    warnings.push('   Consider limiting to specific methods: ["GET", "POST"]');
+  }
+
+  // Show warnings if any
+  if (warnings.length > 0) {
+    console.warn('🚨 Network Monitor Filter Recommendations:');
+    for (const warning of warnings) {
+      console.warn(warning);
+    }
+    console.warn('   Use update_filter tool to adjust filters without restarting monitoring');
+  }
+}
+
+/**
  * Connect to Chrome DevTools Protocol WebSocket
  * @param cdpUrl WebSocket URL for CDP connection
  * @returns Promise<WebSocket> Connected WebSocket instance

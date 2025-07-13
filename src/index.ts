@@ -5,13 +5,20 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
 import { checkExistingBrowser, launchBrowser } from './browser.js';
-import { connectToCdp, startNetworkMonitoring } from './monitor.js';
+import {
+  connectToCdp,
+  startNetworkMonitoring,
+  updateFilterConfig,
+  validateAndWarnFilter,
+} from './monitor.js';
 import {
   GetRecentRequestsSchema,
   type MonitorStatus,
   type NetworkRequest,
   type StartMonitorOptions,
   StartMonitorSchema,
+  type UpdateFilterOptions,
+  UpdateFilterSchema,
 } from './types.js';
 
 export class NetworkMonitorMCP {
@@ -124,26 +131,6 @@ export class NetworkMonitorMCP {
                   description: 'Number of requests to return',
                   default: 10,
                 },
-                filter: {
-                  type: 'object',
-                  description: 'Filter options',
-                  properties: {
-                    methods: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'HTTP methods to include',
-                    },
-                    url_pattern: {
-                      type: 'string',
-                      description: 'URL pattern to match',
-                    },
-                    content_type: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Content types to include',
-                    },
-                  },
-                },
                 include_body: {
                   type: 'boolean',
                   description: 'Include request/response bodies',
@@ -155,6 +142,48 @@ export class NetworkMonitorMCP {
                   default: false,
                 },
               },
+            },
+          },
+          {
+            name: 'update_filter',
+            description: 'Update filter configuration and re-evaluate existing buffer',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filter: {
+                  type: 'object',
+                  description: 'New filter configuration to apply',
+                  properties: {
+                    content_types: {
+                      oneOf: [
+                        {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description: 'Array of content-type patterns to include',
+                        },
+                        {
+                          type: 'string',
+                          enum: ['all'],
+                          description: 'Special value "all" to capture all content types',
+                        },
+                      ],
+                      description: 'Content types to capture',
+                    },
+                    url_exclude_patterns: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Array of URL patterns to exclude',
+                    },
+                    methods: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Array of HTTP methods to include',
+                    },
+                  },
+                  required: [],
+                },
+              },
+              required: ['filter'],
             },
           },
         ],
@@ -171,6 +200,8 @@ export class NetworkMonitorMCP {
           return this.stopMonitor();
         case 'get_recent_requests':
           return this.getRecentRequests(args);
+        case 'update_filter':
+          return this.updateFilter(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -286,53 +317,9 @@ export class NetworkMonitorMCP {
     try {
       const options = GetRecentRequestsSchema.parse(args || {});
 
-      // Apply additional filtering if specified
-      let filteredRequests = [...this.networkBuffer];
-
-      if (options.filter) {
-        filteredRequests = filteredRequests.filter((req) => {
-          // Filter by HTTP methods
-          if (options.filter?.methods && options.filter.methods.length > 0) {
-            if (!options.filter.methods.includes(req.method)) {
-              return false;
-            }
-          }
-
-          // Filter by URL pattern
-          if (options.filter?.url_pattern) {
-            try {
-              const regex = new RegExp(options.filter.url_pattern);
-              if (!regex.test(req.url)) {
-                return false;
-              }
-            } catch (error) {
-              console.error(`Invalid URL pattern: ${options.filter.url_pattern}`, error);
-              return false;
-            }
-          }
-
-          // Filter by content type
-          if (options.filter?.content_type && options.filter.content_type.length > 0) {
-            const responseMimeType = req.response?.mimeType;
-            if (!responseMimeType) {
-              return false;
-            }
-
-            const matchesContentType = options.filter.content_type.some((ct) =>
-              responseMimeType.includes(ct)
-            );
-            if (!matchesContentType) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-      }
-
       // Sort by timestamp (newest first) and limit count
-      filteredRequests.sort((a, b) => b.timestamp - a.timestamp);
-      const limitedRequests = filteredRequests.slice(0, options.count);
+      const sortedRequests = [...this.networkBuffer].sort((a, b) => b.timestamp - a.timestamp);
+      const limitedRequests = sortedRequests.slice(0, options.count);
 
       // Remove request/response bodies and headers if not requested
       const requestsToReturn = limitedRequests.map((req) => {
@@ -392,6 +379,47 @@ export class NetworkMonitorMCP {
       };
     } catch (error) {
       throw new Error(`Failed to get recent requests: ${error}`);
+    }
+  }
+
+  private async updateFilter(args: any) {
+    try {
+      if (!this.isMonitoring) {
+        throw new Error('Monitoring is not active. Start monitoring first with start_monitor.');
+      }
+
+      const options: UpdateFilterOptions = UpdateFilterSchema.parse(args || {});
+
+      // Convert to FilterConfig format
+      const newFilter = {
+        contentTypes: options.filter.content_types || ['application/json'],
+        urlExcludePatterns: options.filter.url_exclude_patterns,
+        methods: options.filter.methods,
+      };
+
+      // Validate and warn about filter configuration
+      validateAndWarnFilter(newFilter);
+
+      // Update filter and re-evaluate existing buffer
+      const removedCount = updateFilterConfig(this.networkBuffer, newFilter);
+
+      const response = {
+        status: 'filter_updated',
+        requests_removed: removedCount,
+        remaining_requests: this.networkBuffer.length,
+        new_filter: newFilter,
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to update filter: ${error}`);
     }
   }
 

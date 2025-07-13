@@ -34,15 +34,16 @@ export const StartMonitorSchema = z.object({
 
 export const GetRecentRequestsSchema = z.object({
   count: z.number().optional().default(10),
-  filter: z
-    .object({
-      methods: z.array(z.string()).optional(),
-      url_pattern: z.string().optional(),
-      content_type: z.array(z.string()).optional(),
-    })
-    .optional(),
   include_body: z.boolean().optional().default(true),
   include_headers: z.boolean().optional().default(false),
+});
+
+export const UpdateFilterSchema = z.object({
+  filter: z.object({
+    content_types: z.union([z.array(z.string()), z.literal('all')]).optional(),
+    url_exclude_patterns: z.array(z.string()).optional(),
+    methods: z.array(z.string()).optional(),
+  }),
 });
 
 /**
@@ -50,6 +51,7 @@ export const GetRecentRequestsSchema = z.object({
  */
 export type StartMonitorOptions = z.infer<typeof StartMonitorSchema>;
 export type GetRecentRequestsOptions = z.infer<typeof GetRecentRequestsSchema>;
+export type UpdateFilterOptions = z.infer<typeof UpdateFilterSchema>;
 
 /**
  * Network request data structure
