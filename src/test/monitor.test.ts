@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   connectToCdp,
   shouldIncludeRequest,
-  shouldIncludeRequestEarly,
+  shouldIncludeRequestByUrlAndMethod,
   startNetworkMonitoring,
 } from '../monitor.js';
 
@@ -203,14 +203,16 @@ describe('Network Monitor', () => {
     });
   });
 
-  describe('shouldIncludeRequestEarly', () => {
+  describe('shouldIncludeRequestByUrlAndMethod', () => {
     it('should include requests when no filters are specified', () => {
       const filter = { contentTypes: ['application/json'] };
 
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://static.example.com/app.js', 'POST', filter)).toBe(
-        true
-      );
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'POST', filter)
+      ).toBe(true);
     });
 
     it('should exclude requests matching URL exclude patterns', () => {
@@ -219,16 +221,18 @@ describe('Network Monitor', () => {
         urlExcludePatterns: ['\\.js$', '\\.css$', '\\.png$'],
       };
 
-      expect(shouldIncludeRequestEarly('https://static.example.com/app.js', 'GET', filter)).toBe(
-        false
-      );
-      expect(shouldIncludeRequestEarly('https://static.example.com/style.css', 'GET', filter)).toBe(
-        false
-      );
-      expect(shouldIncludeRequestEarly('https://static.example.com/logo.png', 'GET', filter)).toBe(
-        false
-      );
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/style.css', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/logo.png', 'GET', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
     });
 
     it('should include only specified HTTP methods when methods filter is set', () => {
@@ -237,12 +241,18 @@ describe('Network Monitor', () => {
         methods: ['GET', 'POST'],
       };
 
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'POST', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'PUT', filter)).toBe(false);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'DELETE', filter)).toBe(
-        false
-      );
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'DELETE', filter)
+      ).toBe(false);
     });
 
     it('should apply both URL and method filters together', () => {
@@ -253,21 +263,27 @@ describe('Network Monitor', () => {
       };
 
       // Should pass both filters
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'POST', filter)).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
 
       // Should fail URL filter
-      expect(shouldIncludeRequestEarly('https://static.example.com/app.js', 'GET', filter)).toBe(
-        false
-      );
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'GET', filter)
+      ).toBe(false);
 
       // Should fail method filter
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'PUT', filter)).toBe(false);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(false);
 
       // Should fail both filters
-      expect(shouldIncludeRequestEarly('https://static.example.com/app.js', 'PUT', filter)).toBe(
-        false
-      );
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://static.example.com/app.js', 'PUT', filter)
+      ).toBe(false);
     });
 
     it('should handle invalid regex patterns gracefully', () => {
@@ -277,7 +293,9 @@ describe('Network Monitor', () => {
       };
 
       // Should include request when regex pattern is invalid (logs error)
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
     });
 
     it('should handle empty methods array (include all methods)', () => {
@@ -286,12 +304,18 @@ describe('Network Monitor', () => {
         methods: [],
       };
 
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'GET', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'POST', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'PUT', filter)).toBe(true);
-      expect(shouldIncludeRequestEarly('https://api.example.com/users', 'DELETE', filter)).toBe(
-        true
-      );
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'GET', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'POST', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'PUT', filter)
+      ).toBe(true);
+      expect(
+        shouldIncludeRequestByUrlAndMethod('https://api.example.com/users', 'DELETE', filter)
+      ).toBe(true);
     });
   });
 });

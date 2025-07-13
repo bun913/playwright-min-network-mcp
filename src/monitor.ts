@@ -18,7 +18,7 @@ export function updateFilterConfig(buffer: NetworkRequest[], newFilter: FilterCo
     const request = buffer[i];
 
     // Check early filtering (URL and method)
-    if (!shouldIncludeRequestEarly(request.url, request.method, newFilter)) {
+    if (!shouldIncludeRequestByUrlAndMethod(request.url, request.method, newFilter)) {
       buffer.splice(i, 1);
       continue;
     }
@@ -101,12 +101,12 @@ export async function connectToCdp(cdpUrl: string): Promise<WebSocket> {
 }
 
 /**
- * Check if a request should be included based on early filtering (URL and method)
+ * Check if a request should be included based on URL and method filtering
  * @param url Request URL
  * @param method Request method
  * @param filter Filter configuration
  */
-export function shouldIncludeRequestEarly(
+export function shouldIncludeRequestByUrlAndMethod(
   url: string,
   method: string,
   filter: FilterConfig
@@ -203,7 +203,7 @@ export async function startNetworkMonitoring(
         const { requestId, request, timestamp } = message.params;
 
         // Apply early filtering (URL and method) before storing
-        if (!shouldIncludeRequestEarly(request.url, request.method, filter)) {
+        if (!shouldIncludeRequestByUrlAndMethod(request.url, request.method, filter)) {
           return; // Skip this request entirely
         }
 
