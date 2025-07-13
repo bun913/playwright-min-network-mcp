@@ -24,6 +24,7 @@ export class NetworkMonitorMCP {
   private cdpWebSocketUrl: string | null = null;
   private cdpPort = 9222;
   private networkBuffer: NetworkRequest[] = [];
+  private pendingRequests = new Map<string, NetworkRequest>();
   private cdpWebSocket: WebSocket | null = null;
   private browserServer: any = null;
 
@@ -300,7 +301,8 @@ export class NetworkMonitorMCP {
           urlIncludePatterns: options.filter.url_include_patterns,
           methods: options.filter.methods,
         },
-        options.max_buffer_size
+        options.max_buffer_size,
+        this.pendingRequests
       );
       this.isMonitoring = true;
 
@@ -395,7 +397,8 @@ export class NetworkMonitorMCP {
         urlIncludePatterns: options.filter.url_include_patterns,
         methods: options.filter.methods,
       },
-      30 // Use default buffer size for filter updates
+      30, // Use default buffer size for filter updates
+      this.pendingRequests
     );
 
     const status: MonitorStatus = {
