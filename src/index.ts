@@ -4,6 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { chromium } from 'playwright';
+import { z } from 'zod';
 import { launchBrowserServer } from './browser.js';
 import { connectToCdp, startNetworkMonitoring } from './monitor.js';
 import {
@@ -47,9 +48,9 @@ export class NetworkMonitorMCP {
       return {
         tools: [
           {
-            name: 'start_or_update_capture',
+            name: 'start_monitor',
             description:
-              'Start network capture or update filter settings with auto-launched browser. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
+              'Start network monitoring with a new browser instance. Default: captures API and form data only (JSON, form submissions). Use "all" to include static files.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -123,6 +124,74 @@ export class NetworkMonitorMCP {
             },
           },
           {
+            name: 'update_filter',
+            description:
+              'Update network monitoring filter settings without restarting the browser. Preserves the current browsing session.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filter: {
+                  type: 'object',
+                  description:
+                    'Content-type filtering configuration. Controls which types of network requests to capture.',
+                  properties: {
+                    content_types: {
+                      oneOf: [
+                        {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description:
+                            'Array of content-type patterns to include. Example: ["application/json", "text/css"] to capture JSON and CSS files.',
+                        },
+                        {
+                          type: 'string',
+                          enum: ['all'],
+                          description:
+                            'Special value "all" to capture all content types including static files (CSS, JS, images).',
+                        },
+                      ],
+                      default: [
+                        'application/json',
+                        'application/x-www-form-urlencoded',
+                        'multipart/form-data',
+                        'text/plain',
+                      ],
+                      description:
+                        'Content types to capture. Default: API and form data only. Use "all" for everything including static files, or [] to capture nothing.',
+                    },
+                    url_include_patterns: {
+                      oneOf: [
+                        {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description:
+                            'Array of URL patterns to include. Example: ["api/", "/graphql"] to capture only API endpoints.',
+                        },
+                        {
+                          type: 'string',
+                          enum: ['all'],
+                          description:
+                            'Special value "all" to include all URLs (no URL filtering).',
+                        },
+                      ],
+                      default: 'all',
+                      description:
+                        'URL patterns to include. Default: "all" for no filtering. Use array of patterns to filter specific URLs.',
+                    },
+                    methods: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Array of HTTP methods to include. Example: ["GET", "POST"] to only capture GET and POST requests.',
+                    },
+                  },
+                  required: ['content_types'],
+                },
+              },
+              required: ['filter'],
+            },
+          },
+          {
             name: 'stop_monitor',
             description: 'Stop network monitoring',
             inputSchema: {
@@ -180,8 +249,10 @@ export class NetworkMonitorMCP {
       const { name, arguments: args } = request.params;
 
       switch (name) {
-        case 'start_or_update_capture':
+        case 'start_monitor':
           return this.startMonitor(args);
+        case 'update_filter':
+          return this.updateFilter(args);
         case 'stop_monitor':
           return this.stopMonitor();
         case 'get_recent_requests':
@@ -275,6 +346,72 @@ export class NetworkMonitorMCP {
         {
           type: 'text',
           text: 'Network monitoring stopped',
+        },
+      ],
+    };
+  }
+
+  private async updateFilter(args: any) {
+    if (!this.isMonitoring || !this.cdpWebSocket) {
+      throw new Error('Network monitoring is not active. Use start_monitor first.');
+    }
+
+    // Parse filter options only
+    const filterSchema = z.object({
+      filter: z.object({
+        content_types: z
+          .union([z.array(z.string()), z.literal('all')])
+          .optional()
+          .default([
+            'application/json',
+            'application/x-www-form-urlencoded',
+            'multipart/form-data',
+            'text/plain',
+          ]),
+        url_include_patterns: z
+          .union([z.array(z.string()), z.literal('all')])
+          .optional()
+          .default('all'),
+        methods: z.array(z.string()).optional(),
+      }),
+    });
+
+    const options = filterSchema.parse(args || {});
+
+    // Clear existing buffer
+    this.networkBuffer.length = 0;
+
+    // Close existing WebSocket and create new one with updated filter
+    this.cdpWebSocket.close();
+    this.cdpWebSocket = await connectToCdp(this.cdpWebSocketUrl!);
+
+    await startNetworkMonitoring(
+      this.cdpWebSocket,
+      this.networkBuffer,
+      {
+        contentTypes: options.filter.content_types,
+        urlIncludePatterns: options.filter.url_include_patterns,
+        methods: options.filter.methods,
+      },
+      20 // Use default buffer size for filter updates
+    );
+
+    const status: MonitorStatus = {
+      status: 'updated',
+      buffer_size: 20,
+      filter: {
+        contentTypes: options.filter.content_types,
+        urlIncludePatterns: options.filter.url_include_patterns,
+      },
+      cdp_endpoint: this.cdpWebSocketUrl,
+      cdp_port: this.cdpPort,
+    };
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(status, null, 2),
         },
       ],
     };
